@@ -64,13 +64,13 @@ def main():
     # load data
     train_list = 'data/train_list.txt'
     train_loader = torch.utils.data.DataLoader(
-        data.ImageList( train_list, transforms.ToTensor() ),
+        data.ImageList( train_list, transforms.ToTensor(), is_train=True),
         batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
 
     val_list = 'data/val_list.txt'
     val_loader = torch.utils.data.DataLoader(
-        data.ImageList( val_list, transforms.ToTensor() ),
+        data.ImageList( val_list, transforms.ToTensor(), is_train=False),
         batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 

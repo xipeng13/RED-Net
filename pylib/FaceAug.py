@@ -84,9 +84,8 @@ def TransformImg(img, center, scale, rot, res, size):
         new_img = scipy.misc.imrotate(new_img, rot)
         new_img = new_img[pad:-pad, pad:-pad]
 
-    new_img = Image.fromarray(new_img, 'RGB')
-    return new_img.resize((res,res))
-    #return scipy.misc.imresize(new_img, (res,res,3))
+    new_img = Image.fromarray(new_img.astype('uint8'), 'RGB')
+    return new_img.resize((res,res), Image.ANTIALIAS)
 # === End of Img.py === #
 
 def Gray2RGB(img):
