@@ -5,7 +5,7 @@ def AddPath(path):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-pylib_path = '/home/px13/code/lib/pylib'
+pylib_path = './pylib'
 AddPath(pylib_path)
 
 model_save_path = '/bigdata1/px13/torch/res_det_reg/'

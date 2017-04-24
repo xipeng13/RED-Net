@@ -134,3 +134,18 @@ def per_image_rmse_component(pred, ann):
             rmse_mt[i] = np.sum(np.linalg.norm(pts_pred[48:68,]-pts_gt[48:68,], axis=1))/(interocular*20)
     return rmse,rmse_le,rmse_re,rmse_ns,rmse_mt
  
+
+def save_image_resmap_heatmap(img, resmap, heatmap, num_pts):
+    # Debug
+    ToPILImage = transforms.ToPILImage()
+    for b in range(args.batch_size):
+        img = ToPILImage(img[b,])
+        img.save('img_%d.jpg' % b)
+        resmap = util.Tensor255ToGrayPILImage(resmap[b,], scale=30)
+        resmap.save('res_%d.png' % b)
+        for c in range(num_pts):
+            #heatmap = util.Tensor01ToGrayPILImage(heatmap[b,c,])
+            heatmap = util.Tensor255ToGrayPILImage(heatmap[b,c,], scale=2)
+            heatmap.save("heatmap_%d_%d.png" % (b,c))
+
+

@@ -42,11 +42,10 @@ parser.add_argument('--pretrained', dest='pretrained', action='store_true',
 parser.set_defaults(pretrained=False)
 
 best_rmse = 1
-softmax = nn.Softmax2d()
 model_save_path = path.model_save_path
 
 def main():
-    global args, best_rmse, softmax, model_save_path
+    global args, best_rmse, model_save_path
     args = parser.parse_args()
     cudnn.benchmark = True
 
@@ -62,7 +61,7 @@ def main():
     net = torch.nn.DataParallel(net).cuda()
     cudnn.benchmark = True
 
-    # Data loading code
+    # load data
     train_list = 'data/train_list.txt'
     train_loader = torch.utils.data.DataLoader(
         data.ImageList( train_list, transforms.ToTensor() ),
@@ -75,10 +74,7 @@ def main():
         batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
-    # define loss function (criterion) and pptimizer
-    weight = torch.Tensor([0.01,1,1,1,1,1,1,1])
-    criterion_det = nn.CrossEntropyLoss2d(size_average=True, weight=weight).cuda()
-    criterion_reg = nn.MSELoss(size_average=True).cuda()
+	# optimizer
     optimizer = torch.optim.SGD(net.parameters(), args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
@@ -104,8 +100,18 @@ def main():
                           'state_dict': net.state_dict(),
                           'best_rmse': best_rmse}, is_best )
 
+def criterion_det(pred, gt, weight):
+	pred = troch.sigmoid(pred)
+	loss = (gt * torch.log(pred+1e-6) + (1-gt) * torch.log(1-pred+1e-6))
+	loss = loss * weight
+	return -loss.sum()/loss.numel()
 
-def train(train_loader, net, criterion_det, criterion_reg, optimizer, epoch):
+def criterion_reg(pred, gt, weight):
+    loss = (pred - gt)**2
+	loss = loss * weight
+	return loss.sum() / loss.numel()
+	
+def train(train_loader, net, optimizer, epoch):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses_det = AverageMeter()
@@ -116,31 +122,36 @@ def train(train_loader, net, criterion_det, criterion_reg, optimizer, epoch):
     net.train()
 
     end = time.time()
-    for i, (img, resmap, heatmap, pts7, pts) in enumerate(train_loader):
+    for i, (img, gt_det, wt_det, pts_det, 
+				 gt_reg, wt_reg, pts_reg) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
+		# input and groundtruth
         input_img = torch.autograd.Variable(img)
-        resmap = resmap.cuda(async=True)
-        heatmap = heatmap.cuda(async=True)
-        target_det = torch.autograd.Variable(resmap)
-        target_reg = torch.autograd.Variable(heatmap)
-        mask_reg = torch.autograd.Variable(heatmap.gt(0)*29).add(1).float()
 
-        # compute output and loss
-        out_det,out_reg = net(input_img)
-        loss_det = criterion_det(out_det, target_det)
-        #loss_reg = criterion_reg(out_reg, target_reg)
-        n = heatmap.size(0)*heatmap.size(1)*heatmap.size(2)*heatmap.size(3)
-        loss_reg = torch.sum( (out_reg-target_reg)**2 * mask_reg ) / n
+        gt_det = gt_det.cuda(async=True)
+        gt_det_var = torch.autograd.Variable(gt_det)
+        wt_det = wt_det.cuda(async=True)
+		wt_det_var = torch.autograd.Variable(wt_det)
+
+        gt_reg = gt_reg.cuda(async=True)
+        gt_reg_var = torch.autograd.Variable(gt_reg)
+        wt_reg = wt_reg.cuda(async=True)
+		wt_reg_var = torch.autograd.Variable(wt_reg)
+
+        # output and loss
+        pred_det,pred_reg = net(input_img)
+
+		loss_det = criterion_det(pred_det, gt_det_var, wt_det_var)
+		loss_reg = criterion_reg(pred_reg, gt_reg_var, wt_reg_var)
+        loss = loss_det + loss_reg * 0.1
 
         losses_det.update(loss_det.data[0], img.size(0))
         losses_reg.update(loss_reg.data[0], img.size(0))
-
-        loss = loss_det + loss_reg * 0.1
         losses.update(loss.data[0], img.size(0))
 
-        # compute gradient and do SGD step
+        # gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -160,12 +171,12 @@ def train(train_loader, net, criterion_det, criterion_reg, optimizer, epoch):
                    epoch, i, len(train_loader), args.batch_size,
                    batch_time=batch_time, data_time=data_time, 
                    loss_det=losses_det, loss_reg=losses_reg, loss=losses))
-            acc = util.per_class_acc_batch(softmax(out_det).cpu().data, resmap.cpu())
+            acc = util.per_class_acc_batch(torch.sigmoid(pred_det).cpu().data, gt_det.cpu())
             print( 'C0:%.4f C1:%.4f C2:%.4f C3:%.4f C4:%.4f C5:%.4f C6:%.4f C7:%.4f'
                    % (acc[0],acc[1],acc[2],acc[3],acc[4],acc[5],acc[6],acc[7]) )
 
 
-def validate(val_loader, net, criterion_det, criterion_reg):
+def validate(val_loader, net):
     batch_time = AverageMeter()
     losses_det = AverageMeter()
     losses_reg = AverageMeter()
@@ -177,34 +188,39 @@ def validate(val_loader, net, criterion_det, criterion_reg):
     net.eval()
 
     end = time.time()
-    for i, (img, resmap, heatmap, pts7, pts) in enumerate(val_loader):
+	for i, (img, gt_det, wt_det, pts_det, 
+				 gt_reg, wt_reg, pts_reg) in enumerate(val_loader):
+		# input and groundtruth
         input_img = torch.autograd.Variable(img, volatile=True)
-        resmap = resmap.cuda(async=True)
-        heatmap = heatmap.cuda(async=True)
-        target_det = torch.autograd.Variable(resmap)
-        target_reg = torch.autograd.Variable(heatmap)
-        mask_reg = torch.autograd.Variable(heatmap.gt(0)*29).add(1).float()
 
-        # compute output and loss
-        out_det,out_reg = net(input_img)
-        loss_det = criterion_det(out_det, target_det)
-        #loss_reg = criterion_reg(out_reg, target_reg)
-        n = heatmap.size(0)*heatmap.size(1)*heatmap.size(2)*heatmap.size(3)
-        loss_reg = torch.sum( (out_reg-target_reg)**2 * mask_reg ) / n
+        gt_det = gt_det.cuda(async=True)
+        gt_det_var = torch.autograd.Variable(gt_det)
+        wt_det = wt_det.cuda(async=True)
+		wt_det_var = torch.autograd.Variable(wt_det)
+
+        gt_reg = gt_reg.cuda(async=True)
+        gt_reg_var = torch.autograd.Variable(gt_reg)
+        wt_reg = wt_reg.cuda(async=True)
+		wt_reg_var = torch.autograd.Variable(wt_reg)
+
+        # output and loss
+        pred_det,pred_reg = net(input_img)
+
+		loss_det = criterion_det(pred_det, gt_det_var, wt_det_var)
+		loss_reg = criterion_reg(pred_reg, gt_reg_var, wt_reg_var)
+        loss = loss_det + loss_reg * 0.1
 
         losses_det.update(loss_det.data[0], img.size(0))
         losses_reg.update(loss_reg.data[0], img.size(0))
-
-        loss = loss_det + loss_reg * 0.1
         losses.update(loss.data[0], img.size(0))
 
         # calculate rmse
-        pts_det = util.detect_pts(out_det.cpu().data) # b x L x 2
-        rmse_det = np.sum(util.per_image_rmse(pts_det, pts7.numpy())) / img.size(0) # b -> 1
+        pts_det = util.detect_pts(pred_det.cpu().data) # b x L x 2
+        rmse_det = np.sum(util.per_image_rmse(pts_det, pts_det.numpy())) / img.size(0) # b -> 1
         rmses_det.update(rmse_det, img.size(0))
 
-        pts_reg = util.regress_pts(out_reg.cpu().data) # b x L x 2
-        rmse_reg = np.sum(util.per_image_rmse(pts_reg, pts.numpy())) / img.size(0) # b -> 1
+        pts_reg = util.regress_pts(pred_reg.cpu().data) # b x L x 2
+        rmse_reg = np.sum(util.per_image_rmse(pts_reg, pts_reg.numpy())) / img.size(0) # b -> 1
         rmses_reg.update(rmse_reg, img.size(0))
 
         # measure elapsed time
@@ -223,7 +239,7 @@ def validate(val_loader, net, criterion_det, criterion_reg):
                    i, len(val_loader), args.batch_size,
                    batch_time=batch_time, rmse_det=rmses_det, rmse_reg=rmses_reg, 
                    loss_det=losses_det, loss_reg=losses_reg, loss=losses))
-            acc = util.per_class_acc_batch(softmax(out_det).cpu().data, resmap.cpu())
+            acc = util.per_class_acc_batch(torch.sigmoid(pred_det).cpu().data, resmap.cpu())
             print( 'C0:%.4f C1:%.4f C2:%.4f C3:%.4f C4:%.4f C5:%.4f C6:%.4f C7:%.4f'
                    % (acc[0],acc[1],acc[2],acc[3],acc[4],acc[5],acc[6],acc[7]) )
     return rmses_reg.avg
@@ -277,19 +293,6 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
-
-def save_image_resmap_heatmap(img, resmap, heatmap, num_pts):
-    # Debug
-    ToPILImage = transforms.ToPILImage()
-    for b in range(args.batch_size):
-        img = ToPILImage(img[b,])
-        img.save('img_%d.jpg' % b)
-        resmap = util.Tensor255ToGrayPILImage(resmap[b,], scale=30)
-        resmap.save('res_%d.png' % b)
-        for c in range(num_pts):
-            #heatmap = util.Tensor01ToGrayPILImage(heatmap[b,c,])
-            heatmap = util.Tensor255ToGrayPILImage(heatmap[b,c,], scale=2)
-            heatmap.save("heatmap_%d_%d.png" % (b,c))
 
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""

@@ -1,2 +1,2 @@
 export CUDA_VISIBLE_DEVICES=1
-python main.py
+python train.py

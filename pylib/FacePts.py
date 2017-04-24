@@ -2,7 +2,7 @@ import os
 import numpy as np
 from PIL import Image, ImageDraw
 
-## read and write
+############ read and write ##########
 def ReadLmkFromTxt(path,format):
     ct = 0
     list = []
@@ -35,7 +35,9 @@ def ReadLmkFromTxtRecursive(path,format):
                         return list
     return list
 
-## pts v.s. lmk
+
+
+############ pts v.s. lmk ##########
 def Pts2Lmk(fname):
     n_lmk = 68
     lmk = np.genfromtxt(fname, delimiter=' ', skip_header=3, skip_footer=1)
@@ -74,14 +76,17 @@ def Lmk2Bbox_7lmk(lmk, DISTRATIO):
     bbox = (cx-sl/2, cy-sl/2, cx+sl/2, cy+sl/2) # left, top, right, bottom 
     return bbox
 
-## resmap
+
+
+########## resmap ##########
 def Lmk2Resmap(lmk, shape, circle_size):
     #RADIUS = GetCircleSize_L128_R4(scale)
     RADIUS = circle_size
     resmap = Image.new('L', shape)
     draw = ImageDraw.Draw(resmap)
     for l in range(lmk.shape[0]):
-        draw.ellipse((lmk[l,0]-RADIUS,lmk[l,1]-RADIUS,lmk[l,0]+RADIUS,lmk[l,1]+RADIUS), fill=l+1)
+        draw.ellipse((lmk[l,0]-RADIUS,lmk[l,1]-RADIUS,
+					  lmk[l,0]+RADIUS,lmk[l,1]+RADIUS), fill=l+1)
     del draw
     return resmap
 
@@ -111,7 +116,36 @@ def CircleSize(base_size=4, scale=1):
     size = size+2 if size>base_size+2 else size
     return size
 
-## heatmap
+def Lmk2Resmap_mc(pts, resmap_shape, radius):
+    # generate multi-channel resmap, one map for each point
+    pts_num = pts.shape[0]
+    resmap = np.zeros((pts_num, resmap_shape[1], resmap_shape[0]))
+    for i in range(0, pts_num):
+        y, x = np.ogrid[-pts[i][1]:resmap_shape[1] - 
+						pts[i][1], -pts[i][0]:resmap_shape[0] - pts[i][0]]
+        mask = x * x + y * y <= radius * radius
+        resmap[i][mask] = 1
+        # print('channel %d sum is %.f' % (i, np.sum(resmap[i])))
+    return resmap
+
+def GtMap2WeightMap(gt_map, reduce_factor=0.5):
+    # GtMap: c x h x w tensor, could be resmap or heatmap
+    # WeightMap: c x h x w tensor
+	weight_map = np.zeros(gt_map.shape)
+    per_map_sum = gt_map.shape[1] * gt_map.shape[2]
+    for i in range(0, gt_map.shape[0]):
+        mask_foregrnd = gt_map[i] > 0
+        foregrnd_pixel_num = mask_foregrnd.sum()
+        if foregrnd_pixel_num == 0:
+            continue
+        per_weight = float(per_map_sum - foregrnd_pixel_num) / 
+					 float(foregrnd_pixel_num) * reduce_factor
+        weight_map[i][mask_foregrnd] = int(per_weight)
+    return weight_map
+
+
+
+########## heatmap ##########
 def draw_gaussian(img, pt, sigma):
     # Draw a 2D gaussian
     tmp_size = np.round(3 * sigma)
@@ -129,7 +163,7 @@ def draw_gaussian(img, pt, sigma):
     y = x[:, np.newaxis]
     x0 = y0 = size // 2
     # The gaussian is not normalized, we want the center value to equal 1
-    g = np.exp(- ((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma ** 2))
+    g = np.exp(- ((x - x0) ** 2 + (y - y0) ** 2) / (tmp_size ** 2))
 
     # Usable gaussian range
     g_x = max(0, -ul[0]), min(br[0], img.shape[1]) - max(0, ul[0]) + max(0, -ul[0])

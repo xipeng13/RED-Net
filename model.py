@@ -18,11 +18,18 @@ model_urls = {
 }
 
 
-def conv3x3(in_ch, out_ch, stride=1):
-    "3x3 convolution with padding"
-    return nn.Conv2d(in_ch, out_ch, kernel_size=3, stride=stride,
-                     padding=1, bias=False)
+class Conv1x1(nn.Module):
+    def __init__(self, ch_in, ch_out):
+        super(Convfc, self).__init__()
+        self.conv = nn.Conv2d(ch_in, ch_out, kernel_size=1, bias=False)
+        self.bn = nn.BatchNorm2d(ch_out)
+        self.relu = nn.ReLU(inplace=True)
 
+    def forward(self, x):
+        out = self.conv(x)
+        out = self.bn(out)
+        out = self.relu(out)
+        return out
 
 class Residual(nn.Module):
     expansion = 4
@@ -56,7 +63,6 @@ class Residual(nn.Module):
         out = self.relu(out)
         return out
 
-
 class Deconv(nn.Module):
     expansion = 2
     def __init__(self, ch_in, ch, is_output_relu=True):
@@ -80,8 +86,8 @@ class Deconv(nn.Module):
             out = self.relu(out)
         return out
 
-
 class Upsample(nn.Module):
+	expansion = 2
     def __init__(self, ch_in, ch_out):
         super(Upsample, self).__init__()
         self.upsample = nn.UpsamplingNearest2d(scale_factor=2)
@@ -94,20 +100,138 @@ class Upsample(nn.Module):
         out = self.conv(out)
         out = self.bn(out)      # no relu here
         return out
-   
 
-class Convfc(nn.Module):
-    def __init__(self, ch_in, ch_out):
-        super(Convfc, self).__init__()
-        self.conv = nn.Conv2d(ch_in, ch_out, kernel_size=1, bias=False)
-        self.bn = nn.BatchNorm2d(ch_out)
+class REDNetDetRegSkip_upsample(nn.Module):
+    def __init__(self, block, layers):
+        self.ch_in = 64
+        super(REDNetDetRegSkip_deconv, self).__init__()
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,bias=False)
+        self.conv1_1 = nn.Conv2d(10, 64, kernel_size=7, stride=2, padding=3,bias=False)
+        self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.elayer1 = self._make_layer(block, 64, layers[0], stride=1)
+        self.elayer2 = self._make_layer(block, 128, layers[1], stride=2)
+        self.elayer3 = self._make_layer(block, 256, layers[2], stride=2)
+        self.elayer4 = self._make_layer(block, 512, layers[3], stride=2)
+		self.skip1 = block(128, 32)		# 128 x 128
+        self.skip2 = block(256, 64) 	# 64 x 64
+        self.skip3 = block(512, 128)	# 32 x 32
+        self.skip4 = block(1024, 256)	# 16 x 16
+        self.upsample4 = Upsample(2048, 1024) # 16 x 16 
+        self.upsample3 = Upsample(1024, 512) 	# 32 x 32
+        self.upsample2 = Upsample(512, 256)	# 64 x 64
+        self.upsample1 = Upsample(256, 128) 	# 128 x 128
+		self.dlayer4 = self._make_layer(block, 256)		# 16 x 16
+		self.dlayer3 = self._make_layer(block, 128)		# 32 x 32
+		self.dlayer2 = self._make_layer(block, 64)		# 64 x 64
+		self.dlayer1 = self._make_layer(block, 32)		# 128 x 128
+        self.fc_det = Conv1x1(128, 64)		# 128 x 128
+        self.fc_reg = Conv1x1(128, 128)		# 128 x 128
+        self.out_det = nn.Conv2d(64, 7, kernel_size=1, stride=1, bias=False)
+        self.out_reg = nn.Conv2d(128, 68, kernel_size=1, stride=1, bias=False)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                #n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                #m.weight.data.normal_(0, math.sqrt(2. / n))
+				m.weight.data.zero_()
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+
+    def _make_layer(self, block, ch, num_block, stride=1):
+        downsample = None
+        if stride != 1 or self.ch_in != ch * block.expansion:
+            downsample = nn.Sequential(
+                nn.Conv2d(self.ch_in, ch * block.expansion,
+                          kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(ch * block.expansion),
+            )
+
+        layers = []
+        layers.append(block(self.ch_in, ch, stride, downsample))
+        self.ch_in = ch * block.expansion
+        for i in range(1, num_block):
+            layers.append(block(self.ch_in, ch))
+
+        return nn.Sequential(*layers)
 
     def forward(self, x):
-        out = self.conv(x)
-        out = self.bn(out)
-        out = self.relu(out)
-        return out
+		# encoder
+        #print(x.data.size())
+        if x.data.size(1) == 3:
+            x = self.conv1(x)
+        elif x.data.size(1) == 10:
+            x = self.conv1_1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+		s1 = self.skip1(x)		# 128 x 128
+        #print(x.data.size())
+        x = self.maxpool(x)
+        x = self.elayer1(x)
+        s2 = self.skip2(x)		# 64 x 64
+        #print(x.data.size())
+        x = self.elayer2(x)
+        s3 = self.skip3(x)		# 32 x 32
+        #print(x.data.size())
+        x = self.elayer3(x)	
+        s4 = self.skip4(x)		# 16 x 16
+        #print(x.data.size())
+        x = self.elayer4(x)
+
+        # decoder
+		x = self.upsample(x)	# 16 x 16
+        x += s4
+        x = self.relu(x)
+        x = self.dlayer4(x)
+        #print(x.data.size())
+		x = self.upsample(x)	# 32 x 32
+        x += s3
+        x = self.relu(x)
+        x = self.dlayer3(x)
+        #print(x.data.size())
+        x = self.upsample(x)	# 64 x 64
+        x += s2
+        x = self.relu(x)
+        x = self.dlayer2(x)
+        #print(x.data.size())
+		x = self.upsample(x)	# 128 x 128
+		x += s1
+		x = self.relu(x)
+        x = self.dlayer1(x)
+        #print(x.data.size())
+
+		# detection
+		x_fc_det = self.fc_det(x)
+        x_det = self.out_det(x_fc_det)
+		# regression
+        x_fc_reg = self.flayer2(x)
+        x_reg = self.out_reg(x_fc_reg)
+
+        return x_det, x_reg
+
+def rednet_det_reg_skip_upsample(pretrained=False):
+    net = REDNetDetRegSkip_deconv(Residual, [3, 8, 36, 3])
+
+    own_state = net.state_dict()
+    #for name, param in own_state.items():
+    #    print(name)
+    #    print(param.size())
+
+    if pretrained:
+        print('=>load pretrained weights ...')
+        state_dict = model_zoo.load_url(model_urls['resnet152'])
+        for name, param in state_dict.items():
+            if name not in own_state:
+                print('not load weights %s' % name)
+                continue
+            if isinstance(param, Parameter):
+                param = param.data
+            own_state[name].copy_(param)
+            print('load weights %s' % name)
+
+    return net
 
 
 class REDNetDecRegSkip_deconv(nn.Module):

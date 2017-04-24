@@ -5,7 +5,7 @@ from PIL import Image
 import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
-import PXPts, PXAugFace, util
+import FacePts, FaceAug, util
 
 
 def default_loader(path):
@@ -51,29 +51,36 @@ class ImageList(data.Dataset):
             scale_aug = np.random.uniform(1, 1, 1)
             rotate_aug = np.random.uniform(0, 0, 1)
 
-        img_aug,pts_aug = PXAugFace.AugImgPts(np.array(img), pts, 
-                            self.img_shape[0], self.face_size, 
-                            scale_aug, rotate_aug)
+        img_aug,pts_aug = FaceAug.AugImgPts(np.array(img), pts, 
+                            	self.img_shape[0], self.face_size, 
+                            	scale_aug, rotate_aug)
         pts_aug /= (self.img_shape[0]/self.heatmap_shape[0]) # L x 2
 
         ## response map for detection
-        pts7 = PXPts.Lmk68to7(pts_aug)
-        ann_size = PXPts.CircleSize(base_size=4, scale=scale_aug)
-        resmap = PXPts.Lmk2Resmap(pts7, self.resmap_shape, ann_size) # w x h
-        resmap = util.GrayPILImageToTensor255(resmap).long() # [0,L), h x w
+        pts_det = FacePts.Lmk68to7(pts_aug)
+        ann_size = FacePts.CircleSize(base_size=4, scale=scale_aug)
+
+		resmap = FacePts.Lmk2Resmap_mc(pts_det, self.resmap_shape, ann_size)
+		wt_resmap = FacePts.GtMap2WeightMap(resmap, ratio=0.5)
+
+        pts_det = torch.from_numpy(pts_det)
+		resmap = torch.from_numpy(resmap).float()
+		wt_resmap = torch.from_numpy(wt_resmap).float()
+
+        #resmap = FacePts.Lmk2Resmap(pts_det, self.resmap_shape, ann_size) # w x h
+        #resmap = util.GrayPILImageToTensor255(resmap).long() # [0,L), h x w
 
         ## heat map for regression
-        heatmap = PXPts.Lmk2Heatmap(pts_aug, self.heatmap_shape, sigma=1)
+		pts_reg = pts_aug
+        heatmap = FacePts.Lmk2Heatmap(pts_reg, self.heatmap_shape, sigma=1)
         heatmap = torch.from_numpy(heatmap).mul(100).float()
 
-        ## pts
-        pts7 = torch.from_numpy(pts7)
-        pts = torch.from_numpy(pts_aug)
+        pts_reg = torch.from_numpy(pts_reg)
 
         if self.transform_img is not None:
             img_aug = self.transform_img(img_aug) # [0,1], c x h x w
 
-        return img_aug, resmap, heatmap, pts7, pts
+        return img_aug, resmap, wt_resmap, pts_det, heatmap, wt_heatmap, pts_reg
 
     def __len__(self):
         return len(self.img_list)
