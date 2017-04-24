@@ -56,21 +56,18 @@ class ImageList(data.Dataset):
                             	scale_aug, rotate_aug)
         pts_aug /= (self.img_shape[0]/self.heatmap_shape[0]) # L x 2
 
-        ## response map for detection
+        ### response map for detection
         pts_det = FacePts.Lmk68to7(pts_aug)
         ann_size = FacePts.CircleSize(base_size=4, scale=scale_aug)
 
 		resmap = FacePts.Lmk2Resmap_mc(pts_det, self.resmap_shape, ann_size)
-		wt_resmap = FacePts.GtMap2WeightMap(resmap, ratio=0.5)
+		wt_resmap = FacePts.GtMap2WeightMap(resmap, reduce_factor=0.5)
 
         pts_det = torch.from_numpy(pts_det)
 		resmap = torch.from_numpy(resmap).float()
 		wt_resmap = torch.from_numpy(wt_resmap).float()
 
-        #resmap = FacePts.Lmk2Resmap(pts_det, self.resmap_shape, ann_size) # w x h
-        #resmap = util.GrayPILImageToTensor255(resmap).long() # [0,L), h x w
-
-        ## heat map for regression
+        ### heat map for regression
 		pts_reg = pts_aug
         heatmap = FacePts.Lmk2Heatmap(pts_reg, self.heatmap_shape, sigma=1)
         heatmap = torch.from_numpy(heatmap).mul(100).float()
