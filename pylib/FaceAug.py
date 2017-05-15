@@ -1,7 +1,6 @@
 # Xi Peng, Jan 2017
 import numpy as np
 import scipy.misc
-#import scipy.signal
 import math
 from PIL import Image
 

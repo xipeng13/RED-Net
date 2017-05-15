@@ -1,6 +1,8 @@
+# Xi Peng, Jan 2017
 import os
 import numpy as np
 from PIL import Image, ImageDraw
+import torch
 
 ############ read and write ##########
 def ReadLmkFromTxt(path,format):
@@ -35,9 +37,17 @@ def ReadLmkFromTxtRecursive(path,format):
                         return list
     return list
 
+def DrawImgPts(img,pts):
+    NLMK = pts.shape[0]
+    img_draw = img.copy()
+    draw = ImageDraw.Draw(img_draw)
+    for l in range(NLMK):
+        draw.ellipse((pts[l,0]-3,pts[l,1]-3,pts[l,0]+3,pts[l,1]+3), fill='white')
+    del draw
+    return img_draw
 
 
-############ pts v.s. lmk ##########
+############ pts vs. lmk ##########
 def Pts2Lmk(fname):
     n_lmk = 68
     lmk = np.genfromtxt(fname, delimiter=' ', skip_header=3, skip_footer=1)
@@ -79,6 +89,18 @@ def Lmk2Bbox_7lmk(lmk, DISTRATIO):
 
 
 ########## resmap ##########
+def Lmk2Resmap_mc(pts, resmap_shape, radius):
+    # generate multi-channel resmap, one map for each point
+    pts_num = pts.shape[0]
+    resmap = np.zeros((pts_num, resmap_shape[1], resmap_shape[0]))
+    for i in range(0, pts_num):
+        y, x = np.ogrid[-pts[i][1]:resmap_shape[1] - 
+						pts[i][1], -pts[i][0]:resmap_shape[0] - pts[i][0]]
+        mask = x * x + y * y <= radius * radius
+        resmap[i][mask] = 1
+        # print('channel %d sum is %.f' % (i, np.sum(resmap[i])))
+    return resmap
+
 def Lmk2Resmap(lmk, shape, circle_size):
     #RADIUS = GetCircleSize_L128_R4(scale)
     RADIUS = circle_size
@@ -102,6 +124,20 @@ def Resmap2Lmk(resmap, NLMK):
             print('Not found %d-th landmark' % l)
     return lmk
 
+def Resmap2Lmk_batch(resmap):
+    # resmap: softmax output b x c x h x w pytorch tensor [0,1]
+    # pts: b x num_pts x 2 numpy
+    batch_size, num_class = resmap.size(0), resmap.size(1)
+    num_lmk = num_class - 1
+
+    resmap = np.argmax(resmap.numpy(), axis=1) # b x h x w
+    lmk = np.zeros((batch_size, num_lmk, 2))
+    for b in range(batch_size):
+        resmap = np.squeeze(resmap[b,]) # h x w
+        lmk[b,] = Resmap2Lmk(resmap, num_lmk)
+    return lmk   
+
+
 def GetCircleSize_L128_R4(scale):
     size = np.round( 4 / scale )
     if size<2:
@@ -116,30 +152,17 @@ def CircleSize(base_size=4, scale=1):
     size = size+2 if size>base_size+2 else size
     return size
 
-def Lmk2Resmap_mc(pts, resmap_shape, radius):
-    # generate multi-channel resmap, one map for each point
-    pts_num = pts.shape[0]
-    resmap = np.zeros((pts_num, resmap_shape[1], resmap_shape[0]))
-    for i in range(0, pts_num):
-        y, x = np.ogrid[-pts[i][1]:resmap_shape[1] - 
-						pts[i][1], -pts[i][0]:resmap_shape[0] - pts[i][0]]
-        mask = x * x + y * y <= radius * radius
-        resmap[i][mask] = 1
-        # print('channel %d sum is %.f' % (i, np.sum(resmap[i])))
-    return resmap
-
 def GtMap2WeightMap(gt_map, reduce_factor=0.5):
     # GtMap: c x h x w tensor, could be resmap or heatmap
     # WeightMap: c x h x w tensor
-	weight_map = np.zeros(gt_map.shape)
+    weight_map = np.ones(gt_map.shape)
     per_map_sum = gt_map.shape[1] * gt_map.shape[2]
     for i in range(0, gt_map.shape[0]):
         mask_foregrnd = gt_map[i] > 0
         foregrnd_pixel_num = mask_foregrnd.sum()
         if foregrnd_pixel_num == 0:
             continue
-        per_weight = float(per_map_sum - foregrnd_pixel_num) / 
-					 float(foregrnd_pixel_num) * reduce_factor
+        per_weight = float(per_map_sum - foregrnd_pixel_num) / float(foregrnd_pixel_num) * reduce_factor
         weight_map[i][mask_foregrnd] = int(per_weight)
     return weight_map
 
@@ -183,6 +206,19 @@ def Lmk2Heatmap(pts, res, sigma=1):
             heatmap[i] = draw_gaussian(heatmap[i], pts[i,], sigma)
     return heatmap
 
+def Heatmap2Lmk_batch(heatmap):
+    # heatmap: b x c x h x w torch tensor [0,1]
+    # lmk: b x num_pts x 2 numpy
+    b,c,h,w = heatmap.size()
+    max_score,idx = torch.max(heatmap.view(b,c,h*w), 2)
+    lmk = idx.repeat(1,1,2).float()
+    lmk[:,:,0] = lmk[:,:,0] % w
+    lmk[:,:,1] = (lmk[:,:,1] / w).floor()
+    mask = max_score.gt(0).repeat(1,1,2).float()
+    #lmk = lmk.mul(mask).add(1)
+    lmk = lmk.add(1)
+    return lmk.numpy()
+
 def Heatmap2Lmk(heatmap):
     # heatmap: NLMK x h x w numpy [0,1]
     # lmk: NLMK x 2 numpy
@@ -191,6 +227,17 @@ def Heatmap2Lmk(heatmap):
     for l in range(NLMK):
         y,x = np.unravel_index(heatmap[l,].argmax(), heatmap[l,].shape)
         lmk[l,:] = [x+1, y+1]
+    return lmk
+
+def Heatmap2Lmk_batch_for(heatmap):
+    # heatmap: b x num_pts x h x w torch tensor [0,1]
+    # lmk: b x num_pts x 2 numpy
+    batch_size, num_lmk = heatmap.size(0), heatmap.size(1)
+    
+    lmk = np.zeros((batch_size, num_lmk, 2))
+    for b in range(batch_size):
+        heatmap1 = heatmap[b,].numpy() # c x h x w
+        lmk[b,] = FacePts.Heatmap2Lmk(heatmap1)
     return lmk
 
 
