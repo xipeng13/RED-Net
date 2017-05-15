@@ -57,10 +57,11 @@ class ImageLoader(data.Dataset):
                             	self.img_shape[0], self.face_size, 
                             	scale_aug, rotate_aug)
 
-        # visdom
+        # debug using visdom
         #img_aug_plot = FacePts.DrawImgPts(img_aug, pts_aug)
         #img_aug_plot = np.asarray(img_aug_plot, dtype='uint8').transpose((2,0,1))
         #vis.image(img_aug_plot, opts=dict(title='img_aug'))
+		#exit()
 
         ### response map for detection
         pts_det = pts_aug * (1.*self.resmap_shape[0]/self.img_shape[0]) # L x 2
@@ -70,7 +71,7 @@ class ImageLoader(data.Dataset):
         resmap = FacePts.Lmk2Resmap_mc(pts_det, self.resmap_shape, ann_size)
         wt_resmap = FacePts.GtMap2WeightMap(resmap, reduce_factor=0.5)
 
-        # visdom
+        # debug using visdom
         #img_det_plot = img_aug.resize((64,64), Image.ANTIALIAS)
         #img_det_plot = FacePts.DrawImgPts(img_det_plot, pts_det)
         #img_det_plot = np.asarray(img_det_plot, dtype='uint8').transpose((2,0,1))

@@ -13,6 +13,7 @@ class Visualizer():
         self.use_visdom = opt.use_visdom
         self.use_html = opt.use_html
         self.win_size = opt.display_winsize
+		self.win_id = 0
         if self.use_visdom:
             import visdom
             self.vis = visdom.Visdom()
@@ -28,14 +29,14 @@ class Visualizer():
         msg = ''
         for k,v in sorted( vars(self.opt).items() ):
             msg = msg + '%s: %s<br />' % (str(k), str(v))
-        self.vis.text(text=msg, opts={'title':'options'}, win=0)
+        self.vis.text( text=msg, opts={'title':'options'}, win=self.win_id++ )
 
         """plot loss, acc, lr"""
-        self.plot_value(history.epoch, history.loss, 'loss', 1)
-        self.plot_value(history.epoch, history.rmse, 'rmse', 2)
-        self.plot_value(history.epoch, history.lr, 'lr', 3)
+        self.plot_value(history.epoch, history.loss, 'loss')
+        self.plot_value(history.epoch, history.rmse, 'rmse')
+        self.plot_value(history.epoch, history.lr, 'lr')
 
-    def plot_value(self, epoch, value, title, win_id):
+    def plot_value(self, epoch, value, title):
         # lr, epoch, loss, rmse (OrderedDict)
         # epoch = OrderedDict([('epoch',1)] )
         # loss = OrderedDict( [('train_loss',0.1),('val_loss',0.2)] )
@@ -48,7 +49,7 @@ class Visualizer():
         X,Y = np.stack([e]*len(l),1), v
         if Y.shape[1]==1:
             X,Y = X.squeeze(1), Y.squeeze(1)
-        self.vis.line( X=X, Y=Y, opts={'title':title, 'legend':l}, win=win_id )
+        self.vis.line( X=X, Y=Y, opts={'title':title, 'legend':l}, win=self.win_id++ )
 
     def print_log(self, epoch, iter, total_iter, time, value1, value2=None):
         # value (OrderedDict)

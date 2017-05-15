@@ -38,6 +38,8 @@ def ReadLmkFromTxtRecursive(path,format):
     return list
 
 def DrawImgPts(img,pts):
+	# img: Image
+	# pts: N x 2 numpy
     NLMK = pts.shape[0]
     img_draw = img.copy()
     draw = ImageDraw.Draw(img_draw)

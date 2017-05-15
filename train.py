@@ -58,6 +58,8 @@ def main():
 
     """training and validation"""
     for epoch in range(opt.resume_epoch, opt.nEpochs):
+		visualizer.win_id = 0
+		
         # train for one epoch
         train_loss = train(train_loader, net, optimizer, epoch, visualizer)
 
@@ -135,7 +137,7 @@ def validate(val_loader, net, epoch, visualizer):
     end = time.time()
     for i, (img, gt_det, wt_det, pts_det) in enumerate(val_loader):
 		# input and groundtruth
-        input_img = torch.autograd.Variable(img, volatile=True)
+        input_img = torch.autograd.Variable(img, volatile=True) # b x 3 x W x H
 
         gt_det = gt_det.cuda(async=True)
         gt_det_var = torch.autograd.Variable(gt_det)
@@ -168,6 +170,15 @@ def validate(val_loader, net, epoch, visualizer):
                                  ('C4',acc[3]), ('C5',acc[4]), ('C6',acc[5])] )
         visualizer.print_log( epoch, i, len(val_loader), batch_time.avg,
                               value1=loss_dict, value2=acc_dict ) 
+
+		# show results of current batch
+		bs = pred_pts_det.shape[0]
+		for b in range(bs):
+			image = img[b,:]
+			print image
+			print image.shape
+		exit()
+
 
     return losses.avg, rmses_det.avg
 
