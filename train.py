@@ -58,13 +58,11 @@ def main():
 
     """training and validation"""
     for epoch in range(opt.resume_epoch, opt.nEpochs):
-		visualizer.win_id = 0
-		
         # train for one epoch
         train_loss = train(train_loader, net, optimizer, epoch, visualizer)
 
         # evaluate on validation set
-        val_loss,val_rmse = validate(val_loader, net, epoch, visualizer)
+        val_loss, val_rmse = validate(val_loader, net, epoch, visualizer)
 
         # update training history
         e = OrderedDict( [('epoch', epoch)] )
@@ -120,7 +118,7 @@ def train(train_loader, net, optimizer, epoch, visualizer):
         acc = FaceAcc.per_class_f1score(pred_det.cpu().data, gt_det.cpu())
         acc_dict = OrderedDict( [('C1',acc[0]), ('C2',acc[1]), ('C3',acc[2]), 
                                  ('C4',acc[3]), ('C5',acc[4]), ('C6',acc[5])] )
-        visualizer.print_log( epoch, i, len(train_loader), batch_time.avg,
+        visualizer.print_log( 'Train', epoch, i, len(train_loader), batch_time.avg,
                               value1=loss_dict, value2=acc_dict ) 
 
     return losses.avg
@@ -168,19 +166,12 @@ def validate(val_loader, net, epoch, visualizer):
         acc = FaceAcc.per_class_f1score(pred_det.cpu().data, gt_det.cpu())
         acc_dict = OrderedDict( [('C1',acc[0]), ('C2',acc[1]), ('C3',acc[2]), 
                                  ('C4',acc[3]), ('C5',acc[4]), ('C6',acc[5])] )
-        visualizer.print_log( epoch, i, len(val_loader), batch_time.avg,
+        visualizer.print_log( 'Val', epoch, i, len(val_loader), batch_time.avg,
                               value1=loss_dict, value2=acc_dict ) 
+        if i==0:
+            visualizer.display_imgpts_in_one_batch(img, pred_pts_det*4.)
 
-		# show results of current batch
-		bs = pred_pts_det.shape[0]
-		for b in range(bs):
-			image = img[b,:]
-			print image
-			print image.shape
-		exit()
-
-
-    return losses.avg, rmses_det.avg
+    return losses.avg, rmses_det.avg,
 
 
 

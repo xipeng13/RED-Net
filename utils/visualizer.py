@@ -1,10 +1,10 @@
 # Xi Peng modify from CycleGAN, May 2017
+import os, time, ntpath
 import numpy as np
-import os
-import ntpath
-import time
+from PIL import Image
 from . import util
 from . import html
+from pylib import FacePts
 
 class Visualizer():
     def __init__(self, opt):
@@ -13,7 +13,6 @@ class Visualizer():
         self.use_visdom = opt.use_visdom
         self.use_html = opt.use_html
         self.win_size = opt.display_winsize
-		self.win_id = 0
         if self.use_visdom:
             import visdom
             self.vis = visdom.Visdom()
@@ -29,19 +28,17 @@ class Visualizer():
         msg = ''
         for k,v in sorted( vars(self.opt).items() ):
             msg = msg + '%s: %s<br />' % (str(k), str(v))
-        self.vis.text( text=msg, opts={'title':'options'}, win=self.win_id++ )
+        self.vis.text( text=msg, opts={'title':'options'}, win=0 )
 
         """plot loss, acc, lr"""
-        self.plot_value(history.epoch, history.loss, 'loss')
-        self.plot_value(history.epoch, history.rmse, 'rmse')
-        self.plot_value(history.epoch, history.lr, 'lr')
+        self.plot_value(history.epoch, history.loss, 'loss', 1)
+        self.plot_value(history.epoch, history.rmse, 'rmse', 2)
+        self.plot_value(history.epoch, history.lr, 'lr', 3)
 
-    def plot_value(self, epoch, value, title):
+    def plot_value(self, epoch, value, title, win_id):
         # lr, epoch, loss, rmse (OrderedDict)
         # epoch = OrderedDict([('epoch',1)] )
         # loss = OrderedDict( [('train_loss',0.1),('val_loss',0.2)] )
-        if epoch==1:
-            return
         e = np.array( [epoch[i].values() for i in range(len(epoch))] ).squeeze(1)
         v = np.array( [value[i].values() for i in range(len(value))] )
         l = list(value[0].keys())
@@ -49,13 +46,13 @@ class Visualizer():
         X,Y = np.stack([e]*len(l),1), v
         if Y.shape[1]==1:
             X,Y = X.squeeze(1), Y.squeeze(1)
-        self.vis.line( X=X, Y=Y, opts={'title':title, 'legend':l}, win=self.win_id++ )
+        self.vis.line( X=X, Y=Y, opts={'title':title, 'legend':l}, win=win_id )
 
-    def print_log(self, epoch, iter, total_iter, time, value1, value2=None):
+    def print_log(self, prefix, epoch, iter, total_iter, time, value1, value2=None):
         # value (OrderedDict)
         if iter % self.opt.print_freq != 0:
             return
-        msg = 'epoch:%d, iters:%d/%d, time:%.3f ' % (epoch, iter, total_iter, time)
+        msg = '%s: epoch:%d, iters:%d/%d, time:%.3f '%(prefix, epoch, iter, total_iter, time)
         for k, v in value1.items():
             msg += '%s: %.4f ' % (k, v)
         if value2:
@@ -70,6 +67,17 @@ class Visualizer():
         file_name = os.path.join(expr_dir, 'log.txt')
         with open(file_name, 'a+') as log_file:
             log_file.write(msg + '\n')
+
+    def display_imgpts_in_one_batch(self, img_batch, pts_batch):
+        win_id = 4
+        for b in range(img_batch.size(0)):
+            img_np = img_batch[b,:].mul(255.).numpy().astype('uint8')
+            pts_np = pts_batch[b,:]
+            img_pil = Image.fromarray(img_np.transpose([1,2,0]), 'RGB')
+            img_plt = FacePts.DrawImgPts(img_pil, pts_np)
+            img_plt = np.asarray(img_plt, dtype='uint8')
+            self.vis.image( img_plt.transpose([2,0,1]), 
+                            opts={'title':'result'}, win=win_id + b )
 
     """TODO. visuals: dictionary of images to display or save"""
     def display_current_results(self, visuals, epoch):
