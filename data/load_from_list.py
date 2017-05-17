@@ -29,7 +29,7 @@ def read_img_pts(img_pts_path):
 class ImageLoader(data.Dataset):
     def __init__( self, list_file, transform=None, is_train=True, 
                   img_shape=[256,256], face_size=200, 
-                  resmap_shape=[64,64], heatmap_shape=[64,64] ):
+                  resmap_shape=[64,64], heatmap_shape=[128,128] ):
         img_list = [line.rstrip('\n') for line in open(list_file)]
         print('total %d images' % len(img_list))
 
@@ -57,6 +57,7 @@ class ImageLoader(data.Dataset):
                             	self.img_shape[0], self.face_size, 
                             	scale_aug, rotate_aug)
 
+        pts_aug2 = torch.from_numpy(pts_aug).float()
         # debug using visdom
         #img_aug_plot = FacePts.DrawImgPts(img_aug, pts_aug)
         #img_aug_plot = np.asarray(img_aug_plot, dtype='uint8').transpose((2,0,1))
@@ -82,21 +83,18 @@ class ImageLoader(data.Dataset):
         #    vis.heatmap(wt_resmap[c,], opts=dict(title='wt_resmap'))
         #exit()
 
-        pts_det = torch.from_numpy(pts_det)
         resmap = torch.from_numpy(resmap).float()
         wt_resmap = torch.from_numpy(wt_resmap).float()
 
         ### heat map for regression
-		#pts_reg = pts_aug
-        #heatmap = FacePts.Lmk2Heatmap(pts_reg, self.heatmap_shape, sigma=1)
-        #heatmap = torch.from_numpy(heatmap).mul(100).float()
-
-        #pts_reg = torch.from_numpy(pts_reg)
+        pts_reg = pts_aug * (1.*self.heatmap_shape[0]/self.img_shape[0]) # L x 2
+        heatmap = FacePts.Lmk2Heatmap(pts_reg, self.heatmap_shape, sigma=1)
+        heatmap = torch.from_numpy(heatmap).mul(10).float()
 
         if self.transform_img is not None:
             img_aug = self.transform_img(img_aug) # [0,1], c x h x w
 
-        return img_aug, resmap, wt_resmap, pts_det
+        return img_aug, pts_aug2, resmap, wt_resmap, heatmap
 
     def __len__(self):
         return len(self.img_list)

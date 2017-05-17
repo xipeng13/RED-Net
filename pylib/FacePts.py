@@ -177,7 +177,7 @@ def draw_gaussian(img, pt, sigma):
     ul = [int(pt[0] - tmp_size), int(pt[1] - tmp_size)]
     br = [int(pt[0] + tmp_size), int(pt[1] + tmp_size)]
     # Check that any part of the gaussian is in-bounds
-    if (ul[0] > img.shape[1] or ul[1] >= img.shape[0] or
+    if (ul[0] >= img.shape[1] or ul[1] >= img.shape[0] or
             br[0] < 0 or br[1] < 0):
         # If not, just return the image as is
         return img
@@ -191,20 +191,20 @@ def draw_gaussian(img, pt, sigma):
     g = np.exp(- ((x - x0) ** 2 + (y - y0) ** 2) / (tmp_size ** 2))
 
     # Usable gaussian range
-    g_x = max(0, -ul[0]), min(br[0], img.shape[1]) - max(0, ul[0]) + max(0, -ul[0])
-    g_y = max(0, -ul[1]), min(br[1], img.shape[0]) - max(0, ul[1]) + max(0, -ul[1])
+    g_x = max(0, -ul[0]), min(br[0]+1, img.shape[1]) - max(0, ul[0]) + max(0, -ul[0])
+    g_y = max(0, -ul[1]), min(br[1]+1, img.shape[0]) - max(0, ul[1]) + max(0, -ul[1])
     # Image range
-    img_x = max(0, ul[0]), min(br[0], img.shape[1])
-    img_y = max(0, ul[1]), min(br[1], img.shape[0])
+    img_x = max(0, ul[0]), min(br[0]+1, img.shape[1])
+    img_y = max(0, ul[1]), min(br[1]+1, img.shape[0])
 
     img[img_y[0]:img_y[1], img_x[0]:img_x[1]] = g[g_y[0]:g_y[1], g_x[0]:g_x[1]]
     return img
 
 def Lmk2Heatmap(pts, res, sigma=1):
-    # generate heatmap n x res[1] x res[0], each row is one pt (x, y)
+    # generate heatmap n x res[0] x res[1], each row is one pt (x, y)
     heatmap = np.zeros((pts.shape[0], res[0], res[1]))
     for i in range(0, pts.shape[0]):
-        if pts[i,0]>0 and pts[i,0]<=res[0] and pts[i,1]>0 and pts[i,1]<=res[1]:
+        if pts[i,0]>0 and pts[i,0]<=res[1] and pts[i,1]>0 and pts[i,1]<=res[0]:
             heatmap[i] = draw_gaussian(heatmap[i], pts[i,], sigma)
     return heatmap
 

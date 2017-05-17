@@ -16,4 +16,10 @@ def weighted_L2(pred, gt, weight):
     loss = (pred - gt)**2
     loss = loss * weight
     return loss.sum() / loss.numel()
- 
+
+def L2(pred, gt):
+    # pred: net output
+    # gt: [0,1] heatmap (gaussian circle)
+    loss = (pred - gt)**2
+    return loss.sum() / loss.numel()
+
