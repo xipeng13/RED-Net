@@ -105,7 +105,7 @@ class Upsample(nn.Module):
 class REDNetRegSkip_upsample(nn.Module):
     def __init__(self, block, layers):
         self.ch_in = 64
-        super(REDNetDetSkip_upsample, self).__init__()
+        super(REDNetRegSkip_upsample, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)#128x128,64
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
@@ -129,8 +129,7 @@ class REDNetRegSkip_upsample(nn.Module):
         self.dlayer0 = self._stack_residual(block, 128, 32, 1, stride=1)	# 128x128,128
         #self.fc_det = Conv1x1(256, 32)    # 64x64,32
         self.out_det = nn.Conv2d(256, 7, kernel_size=1, stride=1, bias=False)
-        #self.fc_reg = Conv1x1(128, 32)    # 64x64,32
-        self.out_det = nn.Conv2d(128, 68, kernel_size=1, stride=1, bias=False)
+        self.out_reg = nn.Conv2d(128, 68, kernel_size=1, stride=1, bias=False)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -172,8 +171,8 @@ class REDNetRegSkip_upsample(nn.Module):
         x = self.conv1(x)       # 128 x 128
         x = self.bn1(x)
         x = self.relu(x)
-        s1 = self.skip0(x)		# 128 x 128
-        s1 = self.skip0_adapt(s1)
+        s0 = self.skip0(x)		# 128 x 128
+        s0 = self.skip0_adapt(s0)
 
         x = self.maxpool(x)     # 64 x 64
 

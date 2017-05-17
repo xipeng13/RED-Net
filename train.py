@@ -155,12 +155,12 @@ def validate(val_loader, net, epoch, visualizer):
         #pred_det = torch.sigmoid(output)
         #loss_det = Criterion.weighted_sigmoid_crossentropy(pred_det, gt_det_var, wt_det_var)
         pred_reg = output
-        loss_reg = Criterion.weighted_L2(pred_reg, gt_reg_var)
+        loss_reg = Criterion.L2(pred_reg, gt_reg_var)
         loss = loss_reg
 
         # calculate rmse
         pred_pts_reg = FacePts.Heatmap2Lmk_batch(pred_reg.cpu().data) # b x L x 2
-        rmse_reg = np.sum(FaceAcc.per_image_rmse( pred_pts_det*2.,
+        rmse_reg = np.sum(FaceAcc.per_image_rmse( pred_pts_reg*2.,
                           pts.numpy() )) / img.size(0)   # b --> 1
 
         """measure elapsed time"""
