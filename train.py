@@ -17,7 +17,7 @@ from torch.nn.parameter import Parameter
 
 from options.train_options import TrainOptions
 from data.load_from_list import ImageLoader
-from models.rednet_det import CreateNet
+from models.rednet_reg import CreateNet
 from utils.util import AverageMeter
 from utils.util import TrainHistory
 from utils.visualizer import Visualizer
@@ -26,15 +26,15 @@ from pylib import FaceAcc, FacePts, Criterion
 cudnn.benchmark = True
 
 def main():
-    opt = TrainOptions().parse() 
+    opt = TrainOptions().parse()
     train_history = TrainHistory()
     checkpoint = Checkpoint(opt)
     visualizer = Visualizer(opt)
-    
+
     """optionally resume from a checkpoint"""
     net = CreateNet(opt)
     checkpoint.load_checkpoint(net, train_history)
-    
+
     """load data"""
     net = torch.nn.DataParallel(net).cuda()
     train_list = os.path.join(opt.data_dir, opt.train_list)
@@ -51,9 +51,9 @@ def main():
 
     """optimizer"""
     #optimizer = torch.optim.SGD( net.parameters(), lr=opt.lr,
-    #                             momentum=opt.momentum, 
+    #                             momentum=opt.momentum,
     #                             weight_decay=opt.weight_decay )
-    optimizer = torch.optim.Adam( net.parameters(), lr=opt.lr, 
+    optimizer = torch.optim.Adam( net.parameters(), lr=opt.lr,
                                   betas=(opt.beta1,0.999))
 
     """training and validation"""
@@ -73,34 +73,39 @@ def main():
         checkpoint.save_checkpoint(net, train_history)
         visualizer.plot_train_history(train_history)
 
-   
+
 def train(train_loader, net, optimizer, epoch, visualizer):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses_det = AverageMeter()
+    losses_reg = AverageMeter()
     losses = AverageMeter()
 
     # switch to train mode
     net.train()
 
     end = time.time()
-    for i, (img, gt_det, wt_det, pts_det) in enumerate(train_loader):
+    for i, (img, pts, gt_det, wt_det, gt_reg) in enumerate(train_loader):
         """measure data loading time"""
         data_time.update(time.time() - end)
 
-		# input and groundtruth
+        # input and groundtruth
         input_img = torch.autograd.Variable(img)
 
         gt_det = gt_det.cuda(async=True)
         gt_det_var = torch.autograd.Variable(gt_det)
         wt_det = wt_det.cuda(async=True)
         wt_det_var = torch.autograd.Variable(wt_det)
+        gt_reg = gt_reg.cuda(async=True)
+        gt_reg_var = torch.autograd.Variable(gt_reg)
 
         # output and loss
         output = net(input_img)
-        pred_det = torch.sigmoid(output)
-        loss_det = Criterion.weighted_sigmoid_crossentropy(pred_det, gt_det_var, wt_det_var)
-        loss = loss_det
+        #pred_det = torch.sigmoid(output)
+        #loss_det = Criterion.weighted_sigmoid_crossentropy(pred_det, gt_det_var, wt_det_var)
+        pred_reg = output
+        loss_reg = Criterion.L2(pred_reg, gt_reg_var)
+        loss = loss_reg
 
         # gradient and do SGD step
         optimizer.zero_grad()
@@ -112,66 +117,71 @@ def train(train_loader, net, optimizer, epoch, visualizer):
         end = time.time()
 
         # print log
-        losses_det.update(loss_det.data[0])
+        losses_reg.update(loss_reg.data[0])
         losses.update(loss.data[0])
-        loss_dict = OrderedDict( [('loss_det', losses_det.val), ('loss', losses.val)] )
-        acc = FaceAcc.per_class_f1score(pred_det.cpu().data, gt_det.cpu())
-        acc_dict = OrderedDict( [('C1',acc[0]), ('C2',acc[1]), ('C3',acc[2]), 
-                                 ('C4',acc[3]), ('C5',acc[4]), ('C6',acc[5])] )
+        loss_dict = OrderedDict( [('loss_reg', losses_reg.val), ('loss', losses.val)] )
+        #acc = FaceAcc.per_class_f1score(pred_det.cpu().data, gt_det.cpu())
+        #acc_dict = OrderedDict( [('C1',acc[0]), ('C2',acc[1]), ('C3',acc[2]),
+        #                         ('C4',acc[3]), ('C5',acc[4]), ('C6',acc[5])] )
         visualizer.print_log( 'Train', epoch, i, len(train_loader), batch_time.avg,
-                              value1=loss_dict, value2=acc_dict ) 
+                              value1=loss_dict )
 
     return losses.avg
 
 def validate(val_loader, net, epoch, visualizer):
     batch_time = AverageMeter()
     losses_det = AverageMeter()
+    losses_reg = AverageMeter()
     losses = AverageMeter()
-    rmses_det = AverageMeter()
+    rmses_reg = AverageMeter()
 
     # switch to evaluate mode
     net.eval()
 
     end = time.time()
-    for i, (img, gt_det, wt_det, pts_det) in enumerate(val_loader):
-		# input and groundtruth
+    for i, (img, pts, gt_det, wt_det, gt_reg) in enumerate(val_loader):
+        # input and groundtruth
         input_img = torch.autograd.Variable(img, volatile=True) # b x 3 x W x H
 
         gt_det = gt_det.cuda(async=True)
         gt_det_var = torch.autograd.Variable(gt_det)
         wt_det = wt_det.cuda(async=True)
         wt_det_var = torch.autograd.Variable(wt_det)
+        gt_reg = gt_reg.cuda(async=True)
+        gt_reg_var = torch.autograd.Variable(gt_reg)
 
         # output and loss
         output = net(input_img)
-        pred_det = torch.sigmoid(output)
-        loss_det = Criterion.weighted_sigmoid_crossentropy(pred_det, gt_det_var, wt_det_var)
-        loss = loss_det
+        #pred_det = torch.sigmoid(output)
+        #loss_det = Criterion.weighted_sigmoid_crossentropy(pred_det, gt_det_var, wt_det_var)
+        pred_reg = output
+        loss_reg = Criterion.L2(pred_reg, gt_reg_var)
+        loss = loss_reg
 
         # calculate rmse
-        pred_pts_det = FacePts.Heatmap2Lmk_batch(pred_det.cpu().data) # b x L x 2
-        rmse_det = np.sum(FaceAcc.per_image_rmse(pred_pts_det, 
-                          pts_det.numpy())) / img.size(0)   # b --> 1
+        pred_pts_reg = FacePts.Heatmap2Lmk_batch(pred_reg.cpu().data) # b x L x 2
+        rmse_reg = np.sum(FaceAcc.per_image_rmse( pred_pts_reg*2.,
+                          pts.numpy() )) / img.size(0)   # b --> 1
 
         """measure elapsed time"""
         batch_time.update(time.time() - end)
         end = time.time()
 
         # print log
-        losses_det.update(loss_det.data[0])
+        losses_reg.update(loss_reg.data[0])
         losses.update(loss.data[0])
-        rmses_det.update(rmse_det, img.size(0))
-        loss_dict = OrderedDict( [('loss_det', losses_det.val), ('loss', losses.val),
-                                  ('rmse_det', rmses_det.val)] )
-        acc = FaceAcc.per_class_f1score(pred_det.cpu().data, gt_det.cpu())
-        acc_dict = OrderedDict( [('C1',acc[0]), ('C2',acc[1]), ('C3',acc[2]), 
-                                 ('C4',acc[3]), ('C5',acc[4]), ('C6',acc[5])] )
+        rmses_reg.update(rmse_reg, img.size(0))
+        loss_dict = OrderedDict( [('loss_det', losses_reg.val), ('loss', losses.val),
+                                  ('rmse_det', rmses_reg.val)] )
+        #acc = FaceAcc.per_class_f1score(pred_det.cpu().data, gt_det.cpu())
+        #acc_dict = OrderedDict( [('C1',acc[0]), ('C2',acc[1]), ('C3',acc[2]),
+        #                         ('C4',acc[3]), ('C5',acc[4]), ('C6',acc[5])] )
         visualizer.print_log( 'Val', epoch, i, len(val_loader), batch_time.avg,
-                              value1=loss_dict, value2=acc_dict ) 
+                              value1=loss_dict )
         if i==0:
-            visualizer.display_imgpts_in_one_batch(img, pred_pts_det*4.)
+            visualizer.display_imgpts_in_one_batch(img, pred_pts_reg*2.)
 
-    return losses.avg, rmses_det.avg,
+    return losses.avg, rmses_reg.avg,
 
 
 

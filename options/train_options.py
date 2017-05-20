@@ -7,7 +7,7 @@ class TrainOptions(BaseOptions):
         self.name = 'lr0.005'
         self.parser.add_argument('--lr', type=float, default=0.005,
                     help='initial learning rate')
-        self.parser.add_argument('--bs', type=int, default=24,
+        self.parser.add_argument('--bs', type=int, default=16,
                     help='mini-batch size')
         self.parser.add_argument('--load_pretrained', type=bool, default=True,
                     help='use pretrained model')
