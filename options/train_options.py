@@ -4,8 +4,8 @@ from .base_options import BaseOptions
 class TrainOptions(BaseOptions):
     def initialize(self):
         BaseOptions.initialize(self)
-        self.name = 'lr0.005'
-        self.parser.add_argument('--lr', type=float, default=0.005,
+        self.name = 'res50_lr0.01'
+        self.parser.add_argument('--lr', type=float, default=0.01,
                     help='initial learning rate')
         self.parser.add_argument('--bs', type=int, default=16,
                     help='mini-batch size')
