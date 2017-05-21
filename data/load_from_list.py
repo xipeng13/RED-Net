@@ -70,7 +70,7 @@ class ImageLoader(data.Dataset):
         ann_size = FacePts.CircleSize(base_size=3, scale=scale_aug)
 
         resmap = FacePts.Lmk2Resmap_mc(pts_det, self.resmap_shape, ann_size)
-        wt_resmap = FacePts.GtMap2WeightMap(resmap, reduce_factor=0.5)
+        wt_resmap = FacePts.GtMap2WeightMap(resmap, reduce_factor=1.)
 
         # debug using visdom
         #img_det_plot = img_aug.resize((64,64), Image.ANTIALIAS)
