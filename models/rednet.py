@@ -102,10 +102,10 @@ class Upsample(nn.Module):
         return out
         
         
-class resskip_upsample_res1x(nn.Module):
+class resskip_upsample_res3x(nn.Module):
     def __init__(self, block, layers):
         self.ch_in = 64
-        super(resskip_upsample_res1x, self).__init__()
+        super(resskip_upsample_res3x, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.conv1_2 = nn.Conv2d(10, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -120,21 +120,21 @@ class resskip_upsample_res1x(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)     # 8x8
 
         # upsample
-        self.skip0 = block(64, 16)	# 128x128,128
+        self.skip0 = self._stack_residual(block, 64, 16, 1, stride=3)	# 128x128,64
         self.skip0a = Conv1x1(64, 128)  # 128x128,128
-        self.skip1 = block(256, 64) 	# 64x64,256
-        self.skip2 = block(512, 128)	# 32x32,128
-        self.skip3 = block(1024, 256)	# 16x16,1024
+        self.skip1 = self._stack_residual(block, 256, 64, 1, stride=3) 	    # 64x64,256
+        self.skip2 = self._stack_residual(block, 512, 128, 1, stride=3)	    # 32x32,128
+        self.skip3 = self._stack_residual(block, 1024, 256, 1, stride=3)	# 16x16,1024
 
         self.upsample4 = Upsample(2048, 1024) 	# 16x16,1024 
         self.upsample3 = Upsample(1024, 512) 	# 32x32,512
-        self.upsample2 = Upsample(512, 256)	# 64x64,256
+        self.upsample2 = Upsample(512, 256)	    # 64x64,256
         self.upsample1 = Upsample(256, 128) 	# 128x128,128
 
-        self.dlayer3 = self._stack_residual(block, 1024, 256, 1, stride=1)	# 16x16,1024
-        self.dlayer2 = self._stack_residual(block, 512, 128, 1, stride=1)	# 32x32,512
-        self.dlayer1 = self._stack_residual(block, 256, 64, 1, stride=1)	# 64x64,256
-        self.dlayer0 = self._stack_residual(block, 128, 32, 1, stride=1)	# 128x128,128
+        self.dlayer3 = self._stack_residual(block, 1024, 256, 1, stride=3)	# 16x16,1024
+        self.dlayer2 = self._stack_residual(block, 512, 128, 1, stride=3)	# 32x32,512
+        self.dlayer1 = self._stack_residual(block, 256, 64, 1, stride=3)	# 64x64,256
+        self.dlayer0 = self._stack_residual(block, 128, 32, 1, stride=3)	# 128x128,128
 
         #self.fc_det = Conv1x1(256, 64)    # 64x64,32
         self.bilinear_upsample = nn.UpsamplingBilinear2d(scale_factor=4)
@@ -183,7 +183,7 @@ class resskip_upsample_res1x(nn.Module):
         elif x.data.size(1) == 10:
             if_detection = False
 
-	# encoder
+	    # encoder
         if if_detection:
             x = self.conv1(x)       # 128 x 128
             x = self.bn1(x)
@@ -238,8 +238,8 @@ class resskip_upsample_res1x(nn.Module):
         return x_middle, x_det, x_reg
 
 def CreateNet(opt):
-    #net = resskip_upsample_res1x(Residual, [3, 8, 36, 3]) # ResNet-152
-    net = resskip_upsample_res1x(Residual, [3, 4, 6, 3]) # ResNet-50
+    #net = resskip_upsample_res3x(Residual, [3, 8, 36, 3]) # ResNet-152
+    net = resskip_upsample_res3x(Residual, [3, 4, 6, 3]) # ResNet-50
     net_dict = net.state_dict()
     #for name, param in net_dict.items():
     #    print(name)
@@ -251,7 +251,7 @@ def CreateNet(opt):
         state_dict = model_zoo.load_url(model_urls['resnet50'])
         for name, param in state_dict.items():
             if name not in net_dict:
-                #print('not load weights %s' % name)
+                print('not load weights %s' % name)
                 continue
             if isinstance(param, Parameter):
                 param = param.data

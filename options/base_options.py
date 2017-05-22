@@ -15,7 +15,7 @@ class BaseOptions():
                     help='checkpoints are saved here')
         self.parser.add_argument('--gpu_ids', type=str, default='0',
                     help='gpu ids: e.g. 0  0,1,2, 0,2') ##TO DO
-        self.parser.add_argument('--nThreads', type=int, default=8,
+        self.parser.add_argument('--nThreads', type=int, default=4,
                     help='number of data loading threads')
         self.parser.add_argument('--ifValidate', type=bool, default=True,
                     help='evaluate model on validation set')

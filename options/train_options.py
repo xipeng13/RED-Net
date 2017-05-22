@@ -4,10 +4,10 @@ from .base_options import BaseOptions
 class TrainOptions(BaseOptions):
     def initialize(self):
         BaseOptions.initialize(self)
-        self.name = 'res50_lr0.01'
+        self.name = 'res50_lr0.01_res3x'
         self.parser.add_argument('--lr', type=float, default=0.01,
                     help='initial learning rate')
-        self.parser.add_argument('--bs', type=int, default=16,
+        self.parser.add_argument('--bs', type=int, default=10,
                     help='mini-batch size')
         self.parser.add_argument('--load_pretrained', type=bool, default=True,
                     help='use pretrained model')

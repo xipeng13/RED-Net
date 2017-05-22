@@ -17,7 +17,7 @@ from torch.nn.parameter import Parameter
 
 from options.train_options import TrainOptions
 from data.load_from_list import ImageLoader
-from models.rednet import CreateNet
+from models.rednet_dirct import CreateNet
 from utils.util import AverageMeter
 from utils.util import TrainHistory
 from utils.visualizer import Visualizer
@@ -197,7 +197,7 @@ def validate(val_loader, net, epoch, visualizer):
                                  ('C4',acc[3]), ('C5',acc[4]), ('C6',acc[5])] )
         visualizer.print_log( 'Val', epoch, i, len(val_loader), batch_time.avg,
                               value1=loss_dict )
-        if i<0:
+        if i<10:
             visualizer.display_imgpts_in_one_batch(img, pred_pts_reg*2.)
 
     return losses_det.avg, losses_reg.avg, losses.avg, rmses_reg.avg,
