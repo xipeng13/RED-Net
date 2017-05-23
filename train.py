@@ -54,11 +54,12 @@ def main():
     #                momentum=opt.momentum, weight_decay=opt.weight_decay )
     #optimizer = torch.optim.Adam( net.parameters(), lr=opt.lr,
     #                              betas=(opt.beta1,0.999))
+    optimizer = model.CreateOptimizer(opt, net)
+    net = torch.nn.DataParallel(net).cuda()
 
     """training and validation"""
     for epoch in range(opt.resume_epoch, opt.nEpochs):
-        optimizer = model.AdjustLR(opt, net, epoch)
-        net = torch.nn.DataParallel(net).cuda()
+        model.AdjustLR(opt, net, epoch)
         # train for one epoch
         train_loss_det, train_loss_reg, tran_loss = \
             train(train_loader, net, optimizer, epoch, visualizer)
