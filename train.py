@@ -29,7 +29,7 @@ def main():
     train_history = TrainHistory()
     checkpoint = Checkpoint(opt)
     visualizer = Visualizer(opt)
-    os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpu_id
+    os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpu_ids
     cudnn.benchmark = True
 
     """optionally resume from a checkpoint"""
@@ -37,7 +37,6 @@ def main():
     checkpoint.load_checkpoint(net, train_history)
 
     """load data"""
-    net = torch.nn.DataParallel(net).cuda()
     train_list = os.path.join(opt.data_dir, opt.train_list)
     train_loader = torch.utils.data.DataLoader(
         ImageLoader( train_list, transforms.ToTensor(), is_train=True),
@@ -59,6 +58,7 @@ def main():
     """training and validation"""
     for epoch in range(opt.resume_epoch, opt.nEpochs):
         optimizer = model.AdjustLR(opt, net, epoch)
+        net = torch.nn.DataParallel(net).cuda()
         # train for one epoch
         train_loss_det, train_loss_reg, tran_loss = \
             train(train_loader, net, optimizer, epoch, visualizer)
@@ -118,7 +118,7 @@ def train(train_loader, net, optimizer, epoch, visualizer):
         
         # regression step
         img_middle = torch.cat( (img_var, torch.sigmoid(out_middle)), 1 )
-        out_middle, out_det, out_reg = net(img_middle)
+        out_middle, out_det, out_reg = net(img_middle.detach())
         loss_reg = Criterion.L2(out_reg, gt_reg_var)
 
         #optimizer.zero_grad()

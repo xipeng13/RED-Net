@@ -33,12 +33,12 @@ class BaseOptions():
         self.opt.isTrain = self.isTrain   # train or test
         self.opt.name = self.name # experiment name
 
-        str_ids = self.opt.gpu_ids.split(',')
-        self.opt.gpu_ids = []
-        for str_id in str_ids:
-            id = int(str_id)
-            if id >= 0:
-                self.opt.gpu_ids.append(id)
+        #str_ids = self.opt.gpu_ids.split(',')
+        #self.opt.gpu_ids = []
+        #for str_id in str_ids:
+        #    id = int(str_id)
+        #    if id >= 0:
+        #        self.opt.gpu_ids.append(id)
 
         args = vars(self.opt)
 
