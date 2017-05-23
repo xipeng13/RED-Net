@@ -77,7 +77,7 @@ def main():
                               ('val_loss_det', val_loss_det),
                               ('val_loss_reg', val_loss_reg) ] )
         rmse = OrderedDict( [ ('det_rmse', det_rmse), 
-                              ('reg_rmse', reg_rmse) ] )
+                              ('val_rmse', reg_rmse) ] )
         train_history.update(e, lr, loss, rmse)
         checkpoint.save_checkpoint(net, train_history)
         visualizer.plot_train_history(train_history)
@@ -186,7 +186,7 @@ def validate(val_loader, net, epoch, visualizer):
         # calculate rmse
         pred_pts_det = FacePts.Heatmap2Lmk_batch(out_det.cpu().data)
         rmse_det = np.sum(FaceAcc.per_image_rmse( pred_pts_det*4.,
-                          pts.numpy() )) / img.size(0)   # b --> 1
+                          FacePts.Lmk68to7_batch(pts.numpy()) )) / img.size(0)   # b --> 1
         pred_pts_reg = FacePts.Heatmap2Lmk_batch(out_reg.cpu().data) # b x L x 2
         rmse_reg = np.sum(FaceAcc.per_image_rmse( pred_pts_reg*2.,
                           pts.numpy() )) / img.size(0)   # b --> 1

@@ -66,6 +66,13 @@ def Lmk68to7(lmk):
     lmk2[6] = lmk[55-1]
     return lmk2
 
+def Lmk68to7_batch(lmk):
+    bs = lmk.shape[0]
+    lmk2 = np.zeros( (bs,7,2) )
+    for b in range(bs):
+        lmk2[b,:] = Lmk68to7(lmk[b,:])
+    return lmk2
+
 def GetCenterDist_68lmk(lmk):
     eyec = np.mean(lmk[36:48,:], axis=0)
     mouc = np.mean(lmk[48:60,:], axis=0)
