@@ -260,7 +260,7 @@ def CreateNet(opt):
             #print('load weights %s' % name)
     return net
 
-def CreateOptimizer(opt, net):
+def CreateSGDOptimizer(opt, net):
     optimizer = torch.optim.SGD( [
         {'params': net.conv1.parameters(), 'lr':  opt.lr*0.1},
         {'params': net.layer1.parameters(), 'lr': opt.lr*0.1},
@@ -282,18 +282,15 @@ def CreateOptimizer(opt, net):
     ], lr=opt.lr, momentum=opt.momentum, weight_decay=opt.weight_decay )
     return optimizer
 
-def AdjustLR(opt, net, epoch):
+def AdjustLR(opt, optimizer, epoch):
     if epoch < 20:
-        for param_group in optimizer.param_groups:
-            print(param_troup)
-        exit()
-    elif epoch < 40:
-         opt.lr = opt.lr * 0.5
-         optimizer = torch.optim.SGD( net.parameters(), lr=opt.lr,
-                    momentum=opt.momentum, weight_decay=opt.weight_decay )
-    else:
-         opt.lr = opt.lr * 0.5
-         optimizer = torch.optim.SGD( net.parameters(), lr=opt.lr,
-                    momentum=opt.momentum, weight_decay=opt.weight_decay )
+        return
+    elif epoch == 20:
+         opt.lr = opt.lr * 0.1
+    elif epoch == 40:
+         opt.lr = opt.lr * 0.1
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = opt.lr
+        print(param_group['lr'])
 
 

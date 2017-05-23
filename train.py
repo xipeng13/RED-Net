@@ -54,18 +54,19 @@ def main():
     #                momentum=opt.momentum, weight_decay=opt.weight_decay )
     #optimizer = torch.optim.Adam( net.parameters(), lr=opt.lr,
     #                              betas=(opt.beta1,0.999))
-    optimizer = model.CreateOptimizer(opt, net)
+    optimizer = model.CreateSGDOptimizer(opt, net)
     net = torch.nn.DataParallel(net).cuda()
 
     """training and validation"""
     for epoch in range(opt.resume_epoch, opt.nEpochs):
-        model.AdjustLR(opt, net, epoch)
+        model.AdjustLR(opt, optimizer, epoch)
+
         # train for one epoch
         train_loss_det, train_loss_reg, tran_loss = \
             train(train_loader, net, optimizer, epoch, visualizer)
 
         # evaluate on validation set
-        val_loss_det, val_loss_reg, val_loss, val_rmse = \
+        val_loss_det, val_loss_reg, val_loss, det_rmse, reg_rmse = \
             validate(val_loader, net, epoch, visualizer)
 
         # update training history
@@ -75,7 +76,8 @@ def main():
                               ('train_loss_reg', train_loss_reg),
                               ('val_loss_det', val_loss_det),
                               ('val_loss_reg', val_loss_reg) ] )
-        rmse = OrderedDict( [('val_rmse', val_rmse)] )
+        rmse = OrderedDict( [ ('det_rmse', det_rmse), 
+                              ('reg_rmse', reg_rmse) ] )
         train_history.update(e, lr, loss, rmse)
         checkpoint.save_checkpoint(net, train_history)
         visualizer.plot_train_history(train_history)
@@ -109,7 +111,7 @@ def train(train_loader, net, optimizer, epoch, visualizer):
         gt_reg_var = torch.autograd.Variable(gt_reg)
 
         # detection step
-        out_middle, out_det, out_reg = net(img_var)
+        out_middle, out_det, out_reg1 = net(img_var)
         out_det = torch.sigmoid(out_det)
         loss_det = Criterion.weighted_sigmoid_crossentropy( out_det, 
                                                 gt_det_var, wt_det_var )
@@ -119,7 +121,7 @@ def train(train_loader, net, optimizer, epoch, visualizer):
         
         # regression step
         img_middle = torch.cat( (img_var, torch.sigmoid(out_middle)), 1 )
-        out_middle, out_det, out_reg = net(img_middle.detach())
+        out_middle, out_det2, out_reg = net(img_middle.detach())
         loss_reg = Criterion.L2(out_reg, gt_reg_var)
 
         #optimizer.zero_grad()
@@ -151,6 +153,7 @@ def validate(val_loader, net, epoch, visualizer):
     losses_det = AverageMeter()
     losses_reg = AverageMeter()
     losses = AverageMeter()
+    rmses_det = AverageMeter()
     rmses_reg = AverageMeter()
 
     # switch to evaluate mode
@@ -171,18 +174,19 @@ def validate(val_loader, net, epoch, visualizer):
         gt_reg_var = torch.autograd.Variable(gt_reg)
 
         # output and loss 
-        out_middle, out_det, out_reg = net(img_var)
+        out_middle, out_det, out_reg1 = net(img_var)
         out_det = torch.sigmoid(out_det)
         loss_det = Criterion.weighted_sigmoid_crossentropy( out_det, 
                                                 gt_det_var, wt_det_var )
         
         img_middle = torch.cat( (img_var, torch.sigmoid(out_middle)), 1 )
-        out_middle, out_det, out_reg = net(img_middle)
+        out_middle, out_det2, out_reg = net(img_middle)
         loss_reg = Criterion.L2(out_reg, gt_reg_var)
 
-        loss = loss_det + loss_reg
-
         # calculate rmse
+        pred_pts_det = FacePts.Heatmap2Lmk_batch(out_det.cpu().data)
+        rmse_det = np.sum(FaceAcc.per_image_rmse( pred_pts_det*4.,
+                          pts.numpy() )) / img.size(0)   # b --> 1
         pred_pts_reg = FacePts.Heatmap2Lmk_batch(out_reg.cpu().data) # b x L x 2
         rmse_reg = np.sum(FaceAcc.per_image_rmse( pred_pts_reg*2.,
                           pts.numpy() )) / img.size(0)   # b --> 1
@@ -193,11 +197,14 @@ def validate(val_loader, net, epoch, visualizer):
         end = time.time()
 
         # print log
+        losses_det.update(loss_det.data[0])
         losses_reg.update(loss_reg.data[0])
+        loss = loss_det + loss_reg
         losses.update(loss.data[0])
+        rmses_det.update(rmse_det, img.size(0))
         rmses_reg.update(rmse_reg, img.size(0))
         loss_dict = OrderedDict( [('loss_det', losses_det.val), ('loss_reg', losses_reg.val),
-            ('loss', losses.val), ('rmse_det', rmses_reg.val)] )
+            ('loss', losses.val), ('rmse_det', rmses_det.val), ('rmse_reg', rmses_reg.val)] )
         acc = FaceAcc.per_class_f1score(out_det.cpu().data, gt_det.cpu())
         acc_dict = OrderedDict( [('C1',acc[0]), ('C2',acc[1]), ('C3',acc[2]),
                                  ('C4',acc[3]), ('C5',acc[4]), ('C6',acc[5])] )
@@ -206,7 +213,7 @@ def validate(val_loader, net, epoch, visualizer):
         if i<10:
             visualizer.display_imgpts_in_one_batch(img, pred_pts_reg*2.)
 
-    return losses_det.avg, losses_reg.avg, losses.avg, rmses_reg.avg,
+    return losses_det.avg, losses_reg.avg, losses.avg, rmses_det.avg, rmses_reg.avg,
 
 
 
