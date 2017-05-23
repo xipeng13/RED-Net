@@ -15,24 +15,25 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 from torch.nn.parameter import Parameter
 
+import models.rednet as model
 from options.train_options import TrainOptions
 from data.load_from_list import ImageLoader
-from models.rednet_dirct import CreateNet
 from utils.util import AverageMeter
 from utils.util import TrainHistory
 from utils.visualizer import Visualizer
 from utils.checkpoint import Checkpoint
 from pylib import FaceAcc, FacePts, Criterion
-cudnn.benchmark = True
 
 def main():
     opt = TrainOptions().parse()
     train_history = TrainHistory()
     checkpoint = Checkpoint(opt)
     visualizer = Visualizer(opt)
+    os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpu_id
+    cudnn.benchmark = True
 
     """optionally resume from a checkpoint"""
-    net = CreateNet(opt)
+    net = model.CreateNet(opt)
     checkpoint.load_checkpoint(net, train_history)
 
     """load data"""
@@ -50,13 +51,14 @@ def main():
         num_workers=opt.nThreads, pin_memory=True)
 
     """optimizer"""
-    optimizer = torch.optim.SGD( net.parameters(), lr=opt.lr,
-                    momentum=opt.momentum, weight_decay=opt.weight_decay )
+    #optimizer = torch.optim.SGD( net.parameters(), lr=opt.lr,
+    #                momentum=opt.momentum, weight_decay=opt.weight_decay )
     #optimizer = torch.optim.Adam( net.parameters(), lr=opt.lr,
     #                              betas=(opt.beta1,0.999))
 
     """training and validation"""
     for epoch in range(opt.resume_epoch, opt.nEpochs):
+        optimizer = model.AdjustLR(opt, net, epoch)
         # train for one epoch
         train_loss_det, train_loss_reg, tran_loss = \
             train(train_loader, net, optimizer, epoch, visualizer)
@@ -105,20 +107,22 @@ def train(train_loader, net, optimizer, epoch, visualizer):
         gt_reg = gt_reg.cuda(async=True)
         gt_reg_var = torch.autograd.Variable(gt_reg)
 
-        # output and loss
+        # detection step
         out_middle, out_det, out_reg = net(img_var)
         out_det = torch.sigmoid(out_det)
         loss_det = Criterion.weighted_sigmoid_crossentropy( out_det, 
                                                 gt_det_var, wt_det_var )
+        optimizer.zero_grad()
+        loss_det.backward()
+        #optimizer.step()
         
+        # regression step
         img_middle = torch.cat( (img_var, torch.sigmoid(out_middle)), 1 )
         out_middle, out_det, out_reg = net(img_middle)
         loss_reg = Criterion.L2(out_reg, gt_reg_var)
 
-        # calc gradient and backpropration
-        loss = loss_det + loss_reg
-        optimizer.zero_grad()
-        loss.backward()
+        #optimizer.zero_grad()
+        loss_reg.backward()
         optimizer.step()
 
         """log and display"""
@@ -129,6 +133,7 @@ def train(train_loader, net, optimizer, epoch, visualizer):
         # print log
         losses_det.update(loss_det.data[0])
         losses_reg.update(loss_reg.data[0])
+        loss = loss_det + loss_reg
         losses.update(loss.data[0])
         loss_dict = OrderedDict( [ ('loss_det', losses_det.val), 
                         ('loss_reg', losses_reg.val), ('loss', losses.val)] )

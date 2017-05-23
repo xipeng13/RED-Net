@@ -1,4 +1,5 @@
 # Xi Peng, Feb 2017
+import torch
 import torch.nn as nn
 import math
 import torch.utils.model_zoo as model_zoo
@@ -258,5 +259,36 @@ def CreateNet(opt):
             net_dict[name].copy_(param)
             #print('load weights %s' % name)
     return net
+
+def AdjustLR(opt, net, epoch):
+    if epoch < 20:
+        optimizer = torch.optim.SGD( [
+            {'params': net.conv1.parameters(), 'lr':  opt.lr*0.1},
+            {'params': net.layer1.parameters(), 'lr': opt.lr*0.1},
+            {'params': net.layer2.parameters(), 'lr': opt.lr*0.1},
+            {'params': net.layer3.parameters(), 'lr': opt.lr*0.1},
+            {'params': net.layer4.parameters(), 'lr': opt.lr*0.1},
+            {'params': net.conv1_2.parameters()},
+            {'params': net.skip0.parameters()},
+            {'params': net.skip0a.parameters()},
+            {'params': net.skip1.parameters()},
+            {'params': net.skip2.parameters()},
+            {'params': net.skip3.parameters()},
+            {'params': net.dlayer3.parameters()},
+            {'params': net.dlayer2.parameters()},
+            {'params': net.dlayer1.parameters()},
+            {'params': net.dlayer0.parameters()},
+            {'params': net.out_det.parameters()},
+            {'params': net.out_reg.parameters()},
+        ], lr=opt.lr, momentum=opt.momentum, weight_decay=opt.weight_decay )
+    elif epoch < 40:
+         opt.lr = opt.lr * 0.5
+         optimizer = torch.optim.SGD( net.parameters(), lr=opt.lr,
+                    momentum=opt.momentum, weight_decay=opt.weight_decay )
+    else:
+         opt.lr = opt.lr * 0.5
+         optimizer = torch.optim.SGD( net.parameters(), lr=opt.lr,
+                    momentum=opt.momentum, weight_decay=opt.weight_decay )
+    return optimizer
 
 
