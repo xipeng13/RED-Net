@@ -121,21 +121,21 @@ class resskip_upsample_res3x(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)     # 8x8
 
         # upsample
-        self.skip0 = self._stack_residual(block, 64, 16, 1, stride=3)	# 128x128,64
+        self.skip0 = self._stack_residual(block, 64, 16, 3, stride=1)	# 128x128,64
         self.skip0a = Conv1x1(64, 128)  # 128x128,128
-        self.skip1 = self._stack_residual(block, 256, 64, 1, stride=3) 	    # 64x64,256
-        self.skip2 = self._stack_residual(block, 512, 128, 1, stride=3)	    # 32x32,128
-        self.skip3 = self._stack_residual(block, 1024, 256, 1, stride=3)	# 16x16,1024
+        self.skip1 = self._stack_residual(block, 256, 64, 3, stride=1) 	    # 64x64,256
+        self.skip2 = self._stack_residual(block, 512, 128, 3, stride=1)	    # 32x32,128
+        self.skip3 = self._stack_residual(block, 1024, 256, 3, stride=1)	# 16x16,1024
 
         self.upsample4 = Upsample(2048, 1024) 	# 16x16,1024 
         self.upsample3 = Upsample(1024, 512) 	# 32x32,512
         self.upsample2 = Upsample(512, 256)	    # 64x64,256
         self.upsample1 = Upsample(256, 128) 	# 128x128,128
 
-        self.dlayer3 = self._stack_residual(block, 1024, 256, 1, stride=3)	# 16x16,1024
-        self.dlayer2 = self._stack_residual(block, 512, 128, 1, stride=3)	# 32x32,512
-        self.dlayer1 = self._stack_residual(block, 256, 64, 1, stride=3)	# 64x64,256
-        self.dlayer0 = self._stack_residual(block, 128, 32, 1, stride=3)	# 128x128,128
+        self.dlayer3 = self._stack_residual(block, 1024, 256, 3, stride=1)	# 16x16,1024
+        self.dlayer2 = self._stack_residual(block, 512, 128, 3, stride=1)	# 32x32,512
+        self.dlayer1 = self._stack_residual(block, 256, 64, 3, stride=1)	# 64x64,256
+        self.dlayer0 = self._stack_residual(block, 128, 32, 3, stride=1)	# 128x128,128
 
         #self.fc_det = Conv1x1(256, 64)    # 64x64,32
         self.bilinear_upsample = nn.UpsamplingBilinear2d(scale_factor=4)
@@ -260,8 +260,8 @@ def CreateNet(opt):
             #print('load weights %s' % name)
     return net
 
-def CreateSGDOptimizer(opt, net):
-    optimizer = torch.optim.SGD( [
+def CreateAdamOptimizer(opt, net):
+    optimizer = torch.optim.Adam( [
         {'params': net.conv1.parameters(), 'lr':  opt.lr*0.1},
         {'params': net.layer1.parameters(), 'lr': opt.lr*0.1},
         {'params': net.layer2.parameters(), 'lr': opt.lr*0.1},
@@ -279,7 +279,7 @@ def CreateSGDOptimizer(opt, net):
         {'params': net.dlayer0.parameters()},
         {'params': net.out_det.parameters()},
         {'params': net.out_reg.parameters()},
-    ], lr=opt.lr, momentum=opt.momentum, weight_decay=opt.weight_decay )
+    ], lr=opt.lr, betas=(opt.beta1,0.999) )
     return optimizer
 
 def AdjustLR(opt, optimizer, epoch):

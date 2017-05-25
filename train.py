@@ -54,7 +54,7 @@ def main():
     #                momentum=opt.momentum, weight_decay=opt.weight_decay )
     #optimizer = torch.optim.Adam( net.parameters(), lr=opt.lr,
     #                              betas=(opt.beta1,0.999))
-    optimizer = model.CreateSGDOptimizer(opt, net)
+    optimizer = model.CreateAdamOptimizer(opt, net)
     net = torch.nn.DataParallel(net).cuda()
 
     """training and validation"""
@@ -117,14 +117,12 @@ def train(train_loader, net, optimizer, epoch, visualizer):
                                                 gt_det_var, wt_det_var )
         optimizer.zero_grad()
         loss_det.backward()
-        #optimizer.step()
         
         # regression step
         img_middle = torch.cat( (img_var, torch.sigmoid(out_middle)), 1 )
         out_middle, out_det2, out_reg = net(img_middle.detach())
         loss_reg = Criterion.L2(out_reg, gt_reg_var)
 
-        #optimizer.zero_grad()
         loss_reg.backward()
         optimizer.step()
 

@@ -15,7 +15,7 @@ class Visualizer():
         self.win_size = opt.display_winsize
         if self.use_visdom:
             import visdom
-            self.vis = visdom.Visdom()
+            self.vis = visdom.Visdom(env=self.name)
 
         if self.use_html:
             self.web_dir = os.path.join(opt.checkpoints_dir, 'web')
