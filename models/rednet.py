@@ -45,7 +45,8 @@ class Residual(nn.Module):
         self.bn3 = nn.BatchNorm2d(ch * 4)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
-        self.stride = stride
+	self.conv4 = nn.Conv2d(ch_in, ch * 4, kernel_size=1, bias=False)
+        self.bn4 = nn.BatchNorm2d(ch * 4)
 
     def forward(self, x):
         residual = x
@@ -60,6 +61,9 @@ class Residual(nn.Module):
         if self.downsample is not None:
             residual = self.downsample(x)
 
+	if residual.size(1) != out.size(1):
+	    residual = self.conv4(residual)
+            residual = self.bn4(residual)
         out += residual
         out = self.relu(out)
         return out
@@ -103,14 +107,12 @@ class Upsample(nn.Module):
         return out
         
         
-class resskip_upsample_res3x(nn.Module):
+class recurrent_detreg_res3x(nn.Module):
     def __init__(self, block, layers):
         self.ch_in = 64
-        super(resskip_upsample_res3x, self).__init__()
+        super(recurrent_detreg_res3x, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
-        self.conv1_2 = nn.Conv2d(10, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1_2 = nn.BatchNorm2d(64)
 
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -121,27 +123,25 @@ class resskip_upsample_res3x(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)     # 8x8
 
         # upsample
-        self.skip0 = self._stack_residual(block, 64, 16, 3, stride=1)	# 128x128,64
-        self.skip0a = Conv1x1(64, 128)  # 128x128,128
         self.skip1 = self._stack_residual(block, 256, 64, 3, stride=1) 	    # 64x64,256
         self.skip2 = self._stack_residual(block, 512, 128, 3, stride=1)	    # 32x32,128
-        self.skip3 = self._stack_residual(block, 1024, 256, 3, stride=1)	# 16x16,1024
+        self.skip3 = self._stack_residual(block, 1024, 256, 3, stride=1)    # 16x16,1024
 
         self.upsample4 = Upsample(2048, 1024) 	# 16x16,1024 
         self.upsample3 = Upsample(1024, 512) 	# 32x32,512
-        self.upsample2 = Upsample(512, 256)	    # 64x64,256
+        self.upsample2 = Upsample(512, 256)	# 64x64,256
         self.upsample1 = Upsample(256, 128) 	# 128x128,128
 
-        self.dlayer3 = self._stack_residual(block, 1024, 256, 3, stride=1)	# 16x16,1024
-        self.dlayer2 = self._stack_residual(block, 512, 128, 3, stride=1)	# 32x32,512
-        self.dlayer1 = self._stack_residual(block, 256, 64, 3, stride=1)	# 64x64,256
-        self.dlayer0 = self._stack_residual(block, 128, 32, 3, stride=1)	# 128x128,128
+        self.dlayer3 = self._stack_residual(block, 1024, 256, 3, stride=1)  # 16x16,1024
+        self.dlayer2 = self._stack_residual(block, 512, 128, 3, stride=1)   # 32x32,512
+        self.dlayer1 = self._stack_residual(block, 256, 64, 3, stride=1)    # 64x64,256
+        self.dlayer0 = self._stack_residual(block, 128, 32, 3, stride=1)    # 128x128,128
 
-        #self.fc_det = Conv1x1(256, 64)    # 64x64,32
-        self.bilinear_upsample = nn.UpsamplingBilinear2d(scale_factor=4)
-        self.out_det = nn.Conv2d(256, 7, kernel_size=1, stride=1, bias=False)
+        self.fc_det = Conv1x1(256, 64)    # 64x64
+        self.out_det = nn.Conv2d(64, 7, kernel_size=1, stride=1, bias=False)
+        self.det_fb = self._stack_residual(block, 7, 64, 1, stride=1)    # 64x64,256
+
         self.out_reg = nn.Conv2d(128, 68, kernel_size=1, stride=1, bias=False)
-
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -173,74 +173,67 @@ class resskip_upsample_res3x(nn.Module):
         layers = []
         layers.append(block(ch_in, ch, stride=1, downsample=None))
         for i in range(1, num_block):
-            layers.append(block(ch_in, ch))
+            layers.append(block(ch * 4, ch))
 
         return nn.Sequential(*layers)
 
-
-    def forward(self, x):
-        if x.data.size(1) == 3:
+    def forward(self, x, x_middle=None):
+        if x.size(1) == 3:
             if_detection = True
-        elif x.data.size(1) == 10:
+        elif x.size(1) == 7:
             if_detection = False
 
-	    # encoder
         if if_detection:
-            x = self.conv1(x)       # 128 x 128
+            # conv1 & layer1
+            x = self.conv1(x)   # 128 x 128
             x = self.bn1(x)
+            x = self.relu(x)
+            x = self.maxpool(x) # 64 x 64
+            x = self.layer1(x)  # 64 x 64
+            x_middle = x
         else:
-            x = self.conv1_2(x)
-            x = self.bn1_2(x)
-        x = self.relu(x)
+            x = self.det_fb(x)
+            x = x + x_middle
 
-        s0 = self.skip0(x)	# 128 x 128
-        s0 = self.skip0a(s0)
-
-        x = self.maxpool(x)     # 64 x 64
-
-        x = self.layer1(x)      # 64 x 64
-        s1 = self.skip1(x)	# 64 x 64
-
-        x = self.layer2(x)      # 32 x 32
-        s2 = self.skip2(x)	# 32 x 32
-
-        x = self.layer3(x)	# 16 x 16
-        s3 = self.skip3(x)	# 16 x 16
-
-        x = self.layer4(x)      # 8 x 8
+        s1 = self.skip1(x)  # 64 x 64
+        x = self.layer2(x)  # 32 x 32
+        s2 = self.skip2(x)  # 32 x 32
+        x = self.layer3(x)  # 16 x 16
+        s3 = self.skip3(x)  # 16 x 16
+        x = self.layer4(x)  # 8 x 8
 
         # decoder
-        x = self.upsample4(x)	# 16 x 16
+        x = self.upsample4(x) # 16 x 16
         x += s3
         x = self.relu(x)
         x = self.dlayer3(x)
 
-        x = self.upsample3(x)	# 32 x 32
+        x = self.upsample3(x) # 32 x 32
         x += s2
         x = self.relu(x)
         x = self.dlayer2(x)
 
-        x = self.upsample2(x)	# 64 x 64
+        x = self.upsample2(x) # 64 x 64
         x += s1
         x = self.relu(x)
         x = self.dlayer1(x)
 
-        # detection
-        x_det = self.out_det(x)
-        x_middle = self.bilinear_upsample(x_det)
+        if if_detection:
+            # detection
+            x_fc_det = self.fc_det(x)
+            x_det = self.out_det(x_fc_det)
+            return x_middle, x_det
+        else:
+            # regression
+            x = self.upsample1(x) # 128 x 128
+            x = self.relu(x)
+            x = self.dlayer0(x)
+            x_reg = self.out_reg(x)
+            return x_reg
 
-        # regression
-        x = self.upsample1(x)	# 128 x 128
-        x += s0
-        x = self.relu(x)
-        x = self.dlayer0(x)
-        x_reg = self.out_reg(x)
-
-        return x_middle, x_det, x_reg
 
 def CreateNet(opt):
-    #net = resskip_upsample_res3x(Residual, [3, 8, 36, 3]) # ResNet-152
-    net = resskip_upsample_res3x(Residual, [3, 4, 6, 3]) # ResNet-50
+    net = recurrent_detreg_res3x(Residual, [3, 4, 6, 3]) # ResNet-50
     net_dict = net.state_dict()
     #for name, param in net_dict.items():
     #    print(name)
@@ -248,7 +241,6 @@ def CreateNet(opt):
 
     if opt.load_pretrained:
         print('=>load pretrained weights ...')
-        #state_dict = model_zoo.load_url(model_urls['resnet152'])
         state_dict = model_zoo.load_url(model_urls['resnet50'])
         for name, param in state_dict.items():
             if name not in net_dict:
@@ -262,14 +254,11 @@ def CreateNet(opt):
 
 def CreateAdamOptimizer(opt, net):
     optimizer = torch.optim.Adam( [
-        {'params': net.conv1.parameters(), 'lr':  opt.lr*0.1},
-        {'params': net.layer1.parameters(), 'lr': opt.lr*0.1},
+        {'params': net.conv1.parameters(), 'lr':  0},
+        {'params': net.layer1.parameters(), 'lr': 0},
         {'params': net.layer2.parameters(), 'lr': opt.lr*0.1},
         {'params': net.layer3.parameters(), 'lr': opt.lr*0.1},
         {'params': net.layer4.parameters(), 'lr': opt.lr*0.1},
-        {'params': net.conv1_2.parameters()},
-        {'params': net.skip0.parameters()},
-        {'params': net.skip0a.parameters()},
         {'params': net.skip1.parameters()},
         {'params': net.skip2.parameters()},
         {'params': net.skip3.parameters()},
@@ -277,18 +266,22 @@ def CreateAdamOptimizer(opt, net):
         {'params': net.dlayer2.parameters()},
         {'params': net.dlayer1.parameters()},
         {'params': net.dlayer0.parameters()},
+        {'params': net.fc_det.parameters()},
         {'params': net.out_det.parameters()},
+        {'params': net.det_fb.parameters()},
         {'params': net.out_reg.parameters()},
     ], lr=opt.lr, betas=(opt.beta1,0.999) )
     return optimizer
 
 def AdjustLR(opt, optimizer, epoch):
-    if epoch < 20:
+    if epoch < 30:
+    	for param_group in optimizer.param_groups:
+        	print(param_group['lr'])
         return
-    elif epoch == 20:
-         opt.lr = opt.lr * 0.1
-    elif epoch == 40:
-         opt.lr = opt.lr * 0.1
+    elif epoch == 30:
+         opt.lr = opt.lr / 2.
+    elif epoch == 60:
+         opt.lr = opt.lr / 2.
     for param_group in optimizer.param_groups:
         param_group['lr'] = opt.lr
         print(param_group['lr'])

@@ -4,8 +4,8 @@ from .base_options import BaseOptions
 class TrainOptions(BaseOptions):
     def initialize(self):
         BaseOptions.initialize(self)
-        self.name = 'lr0.01_res3x_bs12_nofix_conv1layer1'
-        self.parser.add_argument('--gpu_ids', type=str, default='6',
+        self.name = 'lr0.01_bs12_fb1x_1:10'
+        self.parser.add_argument('--gpu_ids', type=str, default='5',
                     help='gpu ids: e.g. 0  0,1,2, 0,2')
         self.parser.add_argument('--lr', type=float, default=0.01,
                     help='initial learning rate')
@@ -17,7 +17,7 @@ class TrainOptions(BaseOptions):
                     help='use checkpoint model')
         self.parser.add_argument('--resume_epoch', type=int, default=1,
                     help='manual epoch number to restart')
-        self.parser.add_argument('--nEpochs', type=int, default=60,
+        self.parser.add_argument('--nEpochs', type=int, default=100,
                     help='number of total training epochs to run')
         self.parser.add_argument('--best_rmse', type=float, default=1.,
                     help='best result until now')

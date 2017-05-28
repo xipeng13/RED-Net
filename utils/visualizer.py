@@ -13,6 +13,7 @@ class Visualizer():
         self.use_visdom = opt.use_visdom
         self.use_html = opt.use_html
         self.win_size = opt.display_winsize
+        self.imgpts_win_id = 4
         if self.use_visdom:
             import visdom
             self.vis = visdom.Visdom(env=self.name)
@@ -48,11 +49,12 @@ class Visualizer():
             X,Y = X.squeeze(1), Y.squeeze(1)
         self.vis.line( X=X, Y=Y, opts={'title':title, 'legend':l}, win=win_id )
 
-    def print_log(self, prefix, epoch, iter, total_iter, time, value1, value2=None):
+    def print_log(self,prefix,epoch,iter,total_iter,time,value1,value2=None):
         # value (OrderedDict)
         if iter % self.opt.print_freq != 0:
             return
-        msg = '%s: epoch:%d, iters:%d/%d, time:%.3f '%(prefix, epoch, iter, total_iter, time)
+        msg = '%s: epoch:%d, iters:%d/%d, time:%.3f ' % \
+                (prefix, epoch, iter, total_iter, time)
         for k, v in value1.items():
             msg += '%s: %.4f ' % (k, v)
         if value2:
@@ -69,15 +71,16 @@ class Visualizer():
             log_file.write(msg + '\n')
 
     def display_imgpts_in_one_batch(self, img_batch, pts_batch):
-        win_id = 4
         for b in range(img_batch.size(0)):
+            self.imgpts_win_id += b
             img_np = img_batch[b,:].mul(255.).numpy().astype('uint8')
             pts_np = pts_batch[b,:]
             img_pil = Image.fromarray(img_np.transpose([1,2,0]), 'RGB')
             img_plt = FacePts.DrawImgPts(img_pil, pts_np)
             img_plt = np.asarray(img_plt, dtype='uint8')
             self.vis.image( img_plt.transpose([2,0,1]), 
-                            opts={'title':'result'}, win=win_id + b )
+                            opts={'title':'result'}, 
+                            win=self.imgpts_win_id )
 
     """TODO. visuals: dictionary of images to display or save"""
     def display_current_results(self, visuals, epoch):
@@ -85,16 +88,19 @@ class Visualizer():
             idx = 1
             for label, image_numpy in visuals.items():
                 #image_numpy = np.flipud(image_numpy)
-                self.vis.image(image_numpy.transpose([2,0,1]), opts=dict(title=label),
-                                   win=self.display_id + idx)
+                self.vis.image( image_numpy.transpose([2,0,1]), 
+                                opts=dict(title=label),
+                                win=self.display_id + idx)
                 idx += 1
 
         if self.use_html: # save images to a html file
             for label, image_numpy in visuals.items():
-                img_path = os.path.join(self.img_dir, 'epoch%.3d_%s.png' % (epoch, label))
+                img_path = os.path.join( self.img_dir, 'epoch%.3d_%s.png' % \
+                                         (epoch, label) ) 
                 util.save_image(image_numpy, img_path)
             # update website
-            webpage = html.HTML(self.web_dir, 'Experiment name = %s' % self.name, reflesh=1)
+            webpage = html.HTML( self.web_dir, 'Experiment name = %s' % \
+                                 self.name, reflesh=1 )
             for n in range(epoch, 0, -1):
                 webpage.add_header('epoch [%d]' % n)
                 ims = []

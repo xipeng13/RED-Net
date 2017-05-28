@@ -21,8 +21,13 @@ class TrainHistory():
         # loss = OrderedDict( [('train_loss',0.1),('val_loss',0.2)] )
         self.epoch.append(epoch)
         self.lr.append(lr)
-        self.loss.append(loss)
-        self.rmse.append(rmse)
+        if len(self.loss)==0 or \
+                loss['val_loss_reg'] < 3.*self.loss[-1]['val_loss_reg']:
+            self.loss.append(loss)
+            self.rmse.append(rmse)
+        else:
+            self.loss.append( self.loss[-1] )
+            self.rmse.append( self.rmse[-1] )
 
         self.is_best = rmse['val_rmse'] < self.best_rmse
         self.best_rmse = min(rmse['val_rmse'], self.best_rmse)
