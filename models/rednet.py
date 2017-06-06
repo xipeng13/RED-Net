@@ -137,9 +137,9 @@ class recurrent_detreg(nn.Module):
         self.dlayer1 = self._stack_residual(block, 256, 64, 3, stride=1)    # 64x64,256
         self.dlayer0 = self._stack_residual(block, 128, 32, 3, stride=1)    # 128x128,128
 
-        #self.fc_det = Conv1x1(256, 64)    # 64x64
-        self.out_det = nn.Conv2d(256, 7, kernel_size=1, stride=1, bias=False)
-        self.det_fb = self._stack_residual(block, 256, 64, 3, stride=1)    # 64x64,256
+        self.fc_det = Conv1x1(256, 64)    # 64x64
+        self.out_det = nn.Conv2d(64, 7, kernel_size=1, stride=1, bias=False)
+        self.det_fb = self._stack_residual(block, 256, 64, 1, stride=1)    # 64x64,256
 
         self.out_reg = nn.Conv2d(128, 68, kernel_size=1, stride=1, bias=False)
 
@@ -180,7 +180,7 @@ class recurrent_detreg(nn.Module):
     def forward(self, x, x_middle=None):
         if x.size(1) == 3:
             if_detection = True
-        elif x.size(1) == 7:
+        elif x.size(1) == 256:
             if_detection = False
 
         if if_detection:
@@ -220,8 +220,8 @@ class recurrent_detreg(nn.Module):
 
         if if_detection:
             # detection
-            #x_fc_det = self.fc_det(x)
-            x_det = self.out_det(x)
+            x_fc_det = self.fc_det(x)
+            x_det = self.out_det(x_fc_det)
             return x_middle, x, x_det
         else:
             # regression
@@ -358,7 +358,7 @@ class recurrent_detreg_direct(nn.Module):
 """
 
 def CreateNet(opt):
-    net = recurrent_detreg_res3x(Residual, [3, 4, 6, 3]) # ResNet-50
+    net = recurrent_detreg(Residual, [3, 4, 6, 3]) # ResNet-50
     net_dict = net.state_dict()
     #for name, param in net_dict.items():
     #    print(name)
@@ -380,6 +380,7 @@ def CreateNet(opt):
 def CreateAdamOptimizer(opt, net):
     optimizer = torch.optim.Adam( [
         {'params': net.conv1.parameters(), 'lr':  0},
+        {'params': net.bn1.parameters(),    'lr': 0},
         {'params': net.layer1.parameters(), 'lr': 0},
         {'params': net.layer2.parameters(), 'lr': opt.lr*0.1},
         {'params': net.layer3.parameters(), 'lr': opt.lr*0.1},

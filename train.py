@@ -111,7 +111,7 @@ def train(train_loader, net, optimizer, epoch, visualizer):
         gt_reg_var = torch.autograd.Variable(gt_reg)
 
         # detection step
-        out_middle,out_det = net(img_var)
+        out_middle,out,out_det = net(img_var)
         out_det = torch.sigmoid(out_det)
         loss_det = Criterion.weighted_sigmoid_crossentropy( out_det, 
                                                 gt_det_var, wt_det_var )
@@ -119,7 +119,7 @@ def train(train_loader, net, optimizer, epoch, visualizer):
         loss_det.backward()
         
         # regression step
-        out_reg = net(out_det.detach(), out_middle.detach())
+        out_reg = net(out.detach(), out_middle.detach())
         loss_reg = Criterion.L2(out_reg, gt_reg_var)
         loss_reg = loss_reg * 10
 
@@ -170,12 +170,12 @@ def validate(val_loader, net, epoch, visualizer):
         gt_reg_var = torch.autograd.Variable(gt_reg, volatile=True)
 
         # output and loss 
-        out_middle, out_det = net(img_var)
+        out_middle,out,out_det = net(img_var)
         out_det = torch.sigmoid(out_det)
         loss_det = Criterion.weighted_sigmoid_crossentropy( out_det, 
                                                 gt_det_var, wt_det_var )
         
-        out_reg = net(out_det, out_middle)
+        out_reg = net(out, out_middle)
         loss_reg = Criterion.L2(out_reg, gt_reg_var)
         loss_reg = loss_reg * 10
 
