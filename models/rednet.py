@@ -254,7 +254,8 @@ def CreateNet(opt):
 
 def CreateAdamOptimizer(opt, net):
     optimizer = torch.optim.Adam( [
-        {'params': net.conv1.parameters(), 'lr':  0},
+        {'params': net.conv1.parameters(),  'lr': 0},
+        {'params': net.bn1.parameters(),    'lr': 0},
         {'params': net.layer1.parameters(), 'lr': 0},
         {'params': net.layer2.parameters(), 'lr': opt.lr*0.1},
         {'params': net.layer3.parameters(), 'lr': opt.lr*0.1},
@@ -266,6 +267,10 @@ def CreateAdamOptimizer(opt, net):
         {'params': net.dlayer2.parameters()},
         {'params': net.dlayer1.parameters()},
         {'params': net.dlayer0.parameters()},
+        {'params': net.upsample4.parameters()},
+        {'params': net.upsample3.parameters()},
+        {'params': net.upsample2.parameters()},
+        {'params': net.upsample1.parameters()},
         {'params': net.fc_det.parameters()},
         {'params': net.out_det.parameters()},
         {'params': net.det_fb.parameters()},
@@ -279,11 +284,10 @@ def AdjustLR(opt, optimizer, epoch):
         	print(param_group['lr'])
         return
     elif epoch == 30:
-         opt.lr = opt.lr / 2.
+         opt.lr = opt.lr * 0.1
     elif epoch == 60:
-         opt.lr = opt.lr / 2.
+         opt.lr = opt.lr * 0.5
     for param_group in optimizer.param_groups:
         param_group['lr'] = opt.lr
         print(param_group['lr'])
-
 
