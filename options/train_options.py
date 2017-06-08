@@ -4,8 +4,8 @@ from .base_options import BaseOptions
 class TrainOptions(BaseOptions):
     def initialize(self):
         BaseOptions.initialize(self)
-        self.name = 'lr0.01_bs20_resbn'
-        self.parser.add_argument('--gpu_ids', type=str, default='7',
+        self.name = 'lr0.01_bs20_resbn_seperateMEM'
+        self.parser.add_argument('--gpu_ids', type=str, default='5',
                     help='gpu ids: e.g. 0  0,1,2, 0,2')
         self.parser.add_argument('--lr', type=float, default=0.01,
                     help='initial learning rate')
