@@ -15,7 +15,7 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 from torch.nn.parameter import Parameter
 
-import models.rednet as model
+import models.rednet_rbn as model
 from options.train_options import TrainOptions
 from data.load_from_list import ImageLoader
 from utils.util import AverageMeter
