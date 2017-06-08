@@ -311,4 +311,3 @@ def AdjustLR(opt, optimizer, epoch):
         param_group['lr'] = opt.lr
         print(param_group['lr'])
 
-
