@@ -66,11 +66,9 @@ def main():
 
         # evaluate on validation set
         val_loss_det, val_loss_reg, val_loss, det_rmse, reg_rmse = \
-            validate(val_loader, net, epoch, visualizer)
+            validate(val_loader, net, epoch, visualizer, is_show=False)
 
         # update training history
-        if epoch < 5:
-            continue
         e = OrderedDict( [('epoch', epoch)] )
         lr = OrderedDict( [('lr', opt.lr)] )
         loss = OrderedDict( [ ('train_loss_det', train_loss_det),
@@ -81,9 +79,12 @@ def main():
                               ('val_rmse', reg_rmse) ] )
         train_history.update(e, lr, loss, rmse)
         checkpoint.save_checkpoint(net, optimizer, train_history)
-        visualizer.imgpts_win_id = 4
         visualizer.plot_train_history(train_history)
 
+        # plot best validation
+        if train_history.is_best:
+            visualizer.imgpts_win_id = 4
+            validate(val_loader, net, epoch, visualizer, is_show=True)
 
 def train(train_loader, net, optimizer, epoch, visualizer):
     batch_time = AverageMeter()
@@ -111,7 +112,7 @@ def train(train_loader, net, optimizer, epoch, visualizer):
         gt_reg_var = torch.autograd.Variable(gt_reg)
 
         # detection step
-        out_middle,out,out_det = net(img_var)
+        out_middle,out_det = net(img_var)
         out_det = torch.sigmoid(out_det)
         loss_det = Criterion.weighted_sigmoid_crossentropy( out_det, 
                                                 gt_det_var, wt_det_var )
@@ -119,7 +120,7 @@ def train(train_loader, net, optimizer, epoch, visualizer):
         loss_det.backward()
         
         # regression step
-        out_reg = net(out.detach(), out_middle.detach())
+        out_reg = net(out_det.detach(), out_middle.detach())
         loss_reg = Criterion.L2(out_reg, gt_reg_var)
         loss_reg = loss_reg * 10
 
@@ -146,7 +147,7 @@ def train(train_loader, net, optimizer, epoch, visualizer):
 
     return losses_det.avg, losses_reg.avg, losses.avg
 
-def validate(val_loader, net, epoch, visualizer):
+def validate(val_loader, net, epoch, visualizer, is_show=False):
     batch_time = AverageMeter()
     losses_det = AverageMeter()
     losses_reg = AverageMeter()
@@ -170,12 +171,12 @@ def validate(val_loader, net, epoch, visualizer):
         gt_reg_var = torch.autograd.Variable(gt_reg, volatile=True)
 
         # output and loss 
-        out_middle,out,out_det = net(img_var)
+        out_middle, out_det = net(img_var)
         out_det = torch.sigmoid(out_det)
         loss_det = Criterion.weighted_sigmoid_crossentropy( out_det, 
                                                 gt_det_var, wt_det_var )
         
-        out_reg = net(out, out_middle)
+        out_reg = net(out_det, out_middle)
         loss_reg = Criterion.L2(out_reg, gt_reg_var)
         loss_reg = loss_reg * 10
 
@@ -207,12 +208,11 @@ def validate(val_loader, net, epoch, visualizer):
         acc = FaceAcc.per_class_f1score(out_det.cpu().data, gt_det.cpu())
         acc_dict = OrderedDict( [('C1',acc[0]), ('C2',acc[1]), ('C3',acc[2]),
                                  ('C4',acc[3]), ('C5',acc[4]), ('C6',acc[5])] )
-        visualizer.print_log( 'Val', epoch, i, len(val_loader), batch_time.avg,
-                              value1=loss_dict )
-        visualizer.display_imgpts_in_one_batch( img, pred_pts_reg*2. )
-
-    return losses_det.avg,losses_reg.avg,losses.avg,rmses_det.avg,rmses_reg.avg,
-
+        visualizer.print_log('Val', epoch, i, len(val_loader), batch_time.avg, value1=loss_dict)
+        if is_show:
+            visualizer.display_imgpts_in_one_batch(img, pred_pts_reg*2.)
+    if not is_show:
+        return losses_det.avg,losses_reg.avg,losses.avg,rmses_det.avg,rmses_reg.avg,
 
 
 if __name__ == '__main__':

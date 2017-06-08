@@ -13,7 +13,7 @@ class TrainHistory():
         self.loss = []
         self.rmse = []
         self.best_rmse = 1.
-        self.is_best = True
+        self.is_best = False
 
     def update(self, epoch, lr, loss, rmse):
         # lr, epoch, loss, rmse (OrderedDict)
@@ -31,6 +31,10 @@ class TrainHistory():
 
         self.is_best = rmse['val_rmse'] < self.best_rmse
         self.best_rmse = min(rmse['val_rmse'], self.best_rmse)
+        print(rmse['val_rmse'])
+        print(self.best_rmse)
+        print(self.is_best)
+        print(self.best_rmse)
 
     def state_dict(self):
         dest = OrderedDict()

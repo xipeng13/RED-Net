@@ -71,16 +71,19 @@ class Visualizer():
             log_file.write(msg + '\n')
 
     def display_imgpts_in_one_batch(self, img_batch, pts_batch):
+        img_plot_batch = np.zeros(img_batch.size()) 
         for b in range(img_batch.size(0)):
-            self.imgpts_win_id += b
             img_np = img_batch[b,:].mul(255.).numpy().astype('uint8')
             pts_np = pts_batch[b,:]
             img_pil = Image.fromarray(img_np.transpose([1,2,0]), 'RGB')
-            img_plt = FacePts.DrawImgPts(img_pil, pts_np)
-            img_plt = np.asarray(img_plt, dtype='uint8')
-            self.vis.image( img_plt.transpose([2,0,1]), 
-                            opts={'title':'result'}, 
-                            win=self.imgpts_win_id )
+            img_plot = FacePts.DrawImgPts(img_pil, pts_np)
+            img_plot = np.asarray(img_plot, dtype='uint8')
+            img_plot_batch[b,] = img_plot.transpose([2,0,1])
+            
+        self.vis.images( img_plot_batch, 
+                        opts={'title':str(self.imgpts_win_id)}, 
+                        win=self.imgpts_win_id )
+        self.imgpts_win_id += 1
 
     """TODO. visuals: dictionary of images to display or save"""
     def display_current_results(self, visuals, epoch):

@@ -4,12 +4,12 @@ from .base_options import BaseOptions
 class TrainOptions(BaseOptions):
     def initialize(self):
         BaseOptions.initialize(self)
-        self.name = 'lr0.01_bs12_indirect_fcdet_fb1x_1:10'
-        self.parser.add_argument('--gpu_ids', type=str, default='3',
+        self.name = 'lr0.01_bs20_resbn'
+        self.parser.add_argument('--gpu_ids', type=str, default='7',
                     help='gpu ids: e.g. 0  0,1,2, 0,2')
         self.parser.add_argument('--lr', type=float, default=0.01,
                     help='initial learning rate')
-        self.parser.add_argument('--bs', type=int, default=12,
+        self.parser.add_argument('--bs', type=int, default=20,
                     help='mini-batch size')
         self.parser.add_argument('--load_pretrained', type=bool, default=True,
                     help='use pretrained model')
