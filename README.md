@@ -2,9 +2,7 @@
 
 This is the demo codes for both training and testing in pytorch.
 
-Caffe version can be found [here](https://github.com/xipeng13/recurrent-face-alignment)
-
-"A Recurrent Encoder-Decoder Network for Sequential Face Alignment"
+Caffe version can be found [here](https://github.com/xipeng13/recurrent-face-alignment).
 
 ## Related publications
 RED-Net: A recurrent encoder-decoder network for video-based face alignment. 
